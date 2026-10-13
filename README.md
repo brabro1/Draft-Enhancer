@@ -54,7 +54,7 @@ The result lands in the message box, so you can edit it before sending, and **Un
 
 1. In SillyTavern, open the **Extensions** panel (puzzle-piece icon in the top bar).
 2. Click **Install extension**.
-3. Paste the repository URL, for example `https://github.com/brabro1/DraftEnhancer`, and confirm. If SillyTavern asks, choose whether to install it for yourself or for all users.
+3. Paste the repository URL, for example `https://github.com/brabro1/Draft-Enhancer`, and confirm. If SillyTavern asks, choose whether to install it for yourself or for all users.
 4. Reload the page. A feather button appears in the send bar, and a **Draft Enhancer** section appears in the Extensions settings.
 
 Installing from a URL needs `git` on the machine that runs SillyTavern. On Termux, run `pkg install git` if it is missing.
