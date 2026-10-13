@@ -15,6 +15,56 @@
     cursor: progress;
 }
 
+/* ---------- Appear / disappear animation ----------
+   Matches SillyTavern's own options and wand menus: a 125 ms fade that turns off with reduced motion.
+   The duration comes from --de-anim, which the script keeps in step with that setting. */
+@keyframes de-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes de-fade-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+.de-menu.de-in,
+.de-bar.de-in {
+    animation: de-fade-in var(--de-anim, 125ms) ease-out;
+}
+
+.de-menu.de-out {
+    animation: de-fade-out var(--de-anim, 125ms) ease-in forwards;
+}
+
+/* Honour reduced motion even before the script sets the variable. */
+@media (prefers-reduced-motion: reduce) {
+
+    .de-menu.de-in,
+    .de-menu.de-out,
+    .de-bar.de-in {
+        animation: none;
+    }
+}
+
+body.reduced-motion .de-menu.de-in,
+body.reduced-motion .de-menu.de-out,
+body.reduced-motion .de-bar.de-in {
+    animation: none;
+}
+
 /* ---------- Menu (modal <dialog>, positioned by script above the button) ---------- */
 .de-menu {
     position: fixed;

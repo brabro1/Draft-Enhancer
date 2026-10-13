@@ -494,7 +494,9 @@ const bar = () => document.getElementById('de_bar');
 
 function showBar() {
     if (!settings().actionBar) return;
+    syncAnim();
     $('#de_bar').removeClass('displayNone de-working');
+    animateIn(bar());
 }
 
 function hideBar() {
@@ -553,6 +555,33 @@ const menu = () => document.getElementById('de_menu');
 const menuOpen = () => !!menu()?.hasAttribute('open');
 
 /*
+ * The menu fades in and out like SillyTavern's own options and wand menus: 125 ms, and nothing at all
+ * when reduced motion is on. The duration lives in a CSS variable so the stylesheet and the timer agree.
+ */
+const ANIM_MS = 125;
+
+function animMs() {
+    const reduced =
+        document.body?.classList?.contains('reduced-motion') ||
+        (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return reduced ? 0 : ANIM_MS;
+}
+
+function syncAnim() {
+    const ms = animMs();
+    document.documentElement?.style?.setProperty?.('--de-anim', `${ms}ms`);
+    return ms;
+}
+
+/** Restarts the appear animation on an element that is already in the page. */
+function animateIn(el) {
+    if (!el?.classList) return;
+    el.classList.remove('de-in', 'de-out');
+    void el.offsetWidth; // forces the browser to replay the animation
+    el.classList.add('de-in');
+}
+
+/*
  * The menu and the preview are <dialog> elements opened with showModal(), which puts them in the
  * browser's top layer, positioned against the screen. Themes that transform the page cannot push
  * them off-screen that way.
@@ -568,7 +597,24 @@ function closeDialog(el) {
     else el.removeAttribute('open');
 }
 
-const closeMenu = () => closeDialog(menu());
+let menuCloseTimer = null;
+
+function closeMenu(instant = false) {
+    const m = menu();
+    if (!m?.hasAttribute('open')) return;
+    clearTimeout(menuCloseTimer);
+    const ms = instant ? 0 : syncAnim();
+    if (!ms) {
+        m.classList.remove('de-in', 'de-out');
+        return closeDialog(m);
+    }
+    m.classList.remove('de-in');
+    m.classList.add('de-out');
+    menuCloseTimer = setTimeout(() => {
+        m.classList.remove('de-out');
+        closeDialog(m);
+    }, ms);
+}
 
 function updateButton() {
     const on = !!settings().enabled;
@@ -592,8 +638,15 @@ function refreshMenu() {
 function toggleMenu() {
     const m = menu();
     if (!m) return;
+    if (m.classList.contains('de-out')) {
+        // caught it on the way out: bring it straight back
+        clearTimeout(menuCloseTimer);
+        refreshMenu();
+        return animateIn(m);
+    }
     if (menuOpen()) return closeMenu();
 
+    syncAnim();
     refreshMenu();
     m.classList.toggle('de-touch', matchMedia('(pointer: coarse)').matches);
     m.style.cssText = 'visibility:hidden;left:0;top:0';
@@ -605,10 +658,11 @@ function toggleMenu() {
     let top = r.top - m.offsetHeight - 8;
     if (top < 8) top = clamp(r.bottom + 8, 8, Math.max(8, innerHeight - m.offsetHeight - 8)); // no room above
     m.style.cssText = `left:${Math.round(left)}px;top:${Math.round(top)}px`;
+    animateIn(m);
 }
 
 function buildUI() {
-    closeMenu();
+    closeMenu(true);
     $('#de_button, #de_menu, #de_bar, #de_ext_enhance, #de_ext_write').remove();
 
     // Sits right above the message box, where SillyTavern puts its own confirm bar.
@@ -878,6 +932,7 @@ globalThis.DraftEnhancer = {
 jQuery(async () => {
     try {
         settings();
+        syncAnim();
         buildSettings();
         buildUI();
         bindEvents();

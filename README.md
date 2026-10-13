@@ -8,7 +8,7 @@ Janitor AI's **Enhance my draft** and **Write something for me**, brought to Sil
 Both follow your active preset, jailbreak included, and put the result in the message box so you can edit it before sending.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-2.0.0--beta.2-orange)
+![Version](https://img.shields.io/badge/version-2.0.0--beta.3-orange)
 ![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-informational)
 
 > **Beta.** This is a pre-release. It works, but expect changes between versions. Bug reports and feedback are very welcome in the [issues](https://github.com/brabro1/Draft-Enhancer/issues).
@@ -67,7 +67,21 @@ After an update, close and reopen the browser tab so the phone does not keep the
 | Writing as: *name* | Switches between writing as **you** and as **the character** | |
 | Undo last change | Brings back the text you had before | `Alt+Z` |
 
-The result appears in the message box (when writing as you it streams in live). Edit it if you like, then send. Tap the feather again while it is working to cancel; your draft comes back.
+The menu is a small popup above the button that fades in and out exactly like SillyTavern's own options and wand menus, and it follows SillyTavern's reduced-motion setting. Tapping anywhere outside it closes it.
+
+The result appears in the message box and streams in live. Edit it if you like, then send. Tap the feather again while it is working to cancel; your draft comes back.
+
+### After each result: Keep, Regenerate, Discard
+
+A bar appears right above the message box, in the same place SillyTavern puts its own confirm bar:
+
+| Button | What it does |
+| --- | --- |
+| **Keep** | Hides the bar and leaves the text in the box, ready to edit and send |
+| **Regenerate** | Runs the same request again, with the same draft, direction and subject |
+| **Discard** | Puts your original draft back and hides the bar |
+
+The bar also disappears when you send the message or switch chats, and it can be turned off in the settings. Editing the text yourself keeps the bar open, so you can still regenerate or discard afterwards.
 
 The two actions are also in SillyTavern's **Extensions (wand) menu**, and as slash commands:
 
@@ -120,7 +134,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Enabled | On | Shows or hides the button and the menu entries |
 | Also show the actions in the wand menu | On | Adds the two actions to SillyTavern's Extensions menu |
 | Keyboard shortcuts | On | `Alt+E`, `Alt+W`, `Alt+Z` inside the message box |
-| Preview before applying | Off | Shows the result in a window with **Use this**, **Retry** and **Cancel** |
+| Show Keep / Regenerate / Discard | On | The bar above the message box after each result (see above) |
 | Send automatically | Off | Sends the result right away |
 | Log every request | Off | Writes each note and raw model output to the browser console |
 
@@ -190,8 +204,8 @@ Draft Enhancer makes no network requests of its own. Your text goes only to the 
 
 ```
 manifest.json   extension metadata
-index.js        settings, the task note, generation, cleanup, menu, preview, slash commands
-style.css       button, menu, preview and settings styles
+index.js        settings, the task note, generation, cleanup, menu, action bar, slash commands
+style.css       button, menu, action bar and settings styles
 ```
 
 Console helpers:
