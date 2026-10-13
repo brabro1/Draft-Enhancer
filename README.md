@@ -296,23 +296,5 @@ Issues and pull requests are welcome. When reporting a bug, include your SillyTa
 Released under the [MIT License](LICENSE).
 
 ---
-
-## العربية
-
-**Draft Enhancer** إضافة لـ SillyTavern تضيف زراً بجانب خانة الرسالة فيه أداتان:
-
-- **Enhance my draft**: تكتب مسودة قصيرة (حتى لو كلمتين) فتتحول إلى رسالة كاملة ومحسّنة تناسب المشهد وأسلوب شخصيتك وأسلوب المحادثة، مع الحفاظ على أحداثك وحوارك.
-- **Write something for me**: تكتب لك رسالتك القادمة، وما كتبته في الخانة يُستخدم كتوجيه.
-
-**التثبيت:** من **Extensions** ثم **Install extension** والصق رابط المستودع، أو انسخ مجلد `DraftEnhancer` يدوياً إلى `SillyTavern/data/default-user/extensions/` ثم أعد التشغيل وحدّث الصفحة.
-
-**الاستخدام:**
-- اكتب مسودتك ثم اضغط زر الريشة واختر **Enhance my draft**، أو اضغط `Alt+E`.
-- `Alt+W` لـ **Write something for me**، و`Alt+Z` للتراجع.
-- الأوامر: `/enhance-draft` و `/write-for-me`.
-- في الإعدادات تتحكم بالطول والإبداع والمنظور والتنسيق ولغة الناتج، وتقدر تفعّل نافذة المعاينة (استخدام / إعادة / إلغاء).
-
-**ملاحظات:**
-- الوضع الافتراضي **Full context** يستخدم الـ preset وبطاقة الشخصية والـ persona واللوربوك، فالنتيجة تتبع موديلك. إذا رد الموديل كالشخصية بدل التحسين، جرّب وضع **Lightweight**.
 - إذا طلعت النتيجة فارغة مع موديل تفكير (reasoning)، ارفع **Max tokens**.
 - الإضافة لا ترسل بياناتك إلا إلى الـ API المتصل بالفعل في SillyTavern.
