@@ -8,7 +8,7 @@ Turn a rough one-liner into a full, polished roleplay message, or let the model 
 The result lands in the message box, so you can edit it before sending, and **Undo** brings your original text back.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-1.1.0-informational)
+![Version](https://img.shields.io/badge/version-1.2.0-informational)
 ![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-orange)
 
 <!-- Add screenshots here, for example: ![Menu](docs/menu.png) ![Settings](docs/settings.png) -->
@@ -38,6 +38,7 @@ The result lands in the message box, so you can edit it before sending, and **Un
 
 - **Works with any draft length.** A short draft is expanded to a target size (configurable minimum), a long one is polished without being cut down.
 - **Follows your preset.** By default every request runs through SillyTavern's own Impersonate pipeline, the same one the Impersonate button uses. Your Chat Completion preset with its jailbreak, post-history instructions and enabled toggles, its Impersonation prompt and impersonation prefill, lorebooks, author's note, persona and chat history all apply, and the result streams into the message box.
+- **Adapts to each preset.** Some presets ship their own impersonation rules (prompts that fire only on Impersonate, narrator rules switched off during Impersonate). Draft Enhancer detects this and sends only what the preset cannot know: your draft, your direction and your settings. With such a preset and nothing typed, "Write something for me" is exactly a native Impersonate. Presets without impersonation rules get a full instruction instead.
 - **Preset-aware cleanup.** Many presets make the model add extras to every reply: time and location headers, status or internal-state panels, HTML, chain-of-thought. The extension asks the model to leave these out of your turn and removes any that slip through.
 - **Faithful to your intent.** Your actions, dialogue and decisions are kept in order. A creativity setting controls how much new detail may be added.
 - **Matches your style.** Perspective, tense and formatting (`*actions*` with `"dialogue"`, or plain prose) are detected from your draft and earlier messages, or forced from the settings.
@@ -140,7 +141,22 @@ Turn on **Preview before applying** to review each result in a window with your 
 | Streams into the message box | Yes, when streaming is on | No | No |
 | Response length | Your preset's setting | Automatic or the Max tokens setting | Automatic or the Max tokens setting |
 
-Preset mode is what makes "Write something for me" behave like your preset: it is the path SillyTavern itself uses when it writes your turn. The task instruction also tells the model that this one reply is your character's turn. Presets normally forbid acting for you, so without this the model would refuse or write for the other character. It also tells the model to keep the preset's style rules and to leave out the extras that only belong in the character's replies.
+Preset mode is what makes "Write something for me" behave like your preset: it is the path SillyTavern itself uses when it writes your turn. Prompts that a preset limits to certain generation types follow SillyTavern's own rules, so a prompt set to fire only on Impersonate fires, and narrator-only prompts (scene headers, trackers, "never act for the user") stay off.
+
+### How the instruction adapts to the preset (Instruction detail: Auto)
+
+| The active preset... | What Draft Enhancer adds |
+| --- | --- |
+| Has prompts that fire only on Impersonate, or switches narrator prompts off during Impersonate | **Lean**: only the draft or direction plus the settings you changed. "Write something for me" with nothing typed and default settings sends nothing extra: it is a plain Impersonate. |
+| Has no impersonation rules (most presets) | **Full**: the complete instruction. It says this reply is your character's turn, which lifts the preset's "never act for the user" rule for this one reply. It keeps the preset's style rules and asks the model to leave out headers, panels and other narrator-only extras. |
+| Text Completion APIs | **Full** (there is no prompt manager to inspect) |
+
+You can force **Lean** or **Full** in the settings.
+
+### Where the instruction goes (Instruction placement)
+
+- **As your message at the end of the chat** (default): a user message after the last chat message. If the preset has its own impersonation message at the same position, SillyTavern merges the two, so the model reads them as one request. Some models copy a final system instruction into their reply, and this placement avoids that.
+- **As a final system note**: SillyTavern's quiet prompt, sent as the last system message.
 
 Use Background or Lightweight only if a particular preset still misbehaves in Preset mode.
 
@@ -156,6 +172,8 @@ Open **Extensions** and expand **Draft Enhancer**. All settings are saved with y
 | Generation mode | Preset | Preset, Background or Lightweight (see above) |
 | Preview before applying | Off | Show the Use / Retry / Cancel window |
 | Send automatically after generating | Off | Send the result immediately |
+| Instruction detail (Preset mode) | Auto | Auto adapts to the preset (see above); Lean lets the preset lead; Full always sends the complete instruction |
+| Instruction placement (Preset mode) | As your message | Where the instruction goes: as a user message at the end of the chat, or as a final system note |
 | Clean preset extras from the result | On | Removes response headers (such as `[ Time | Day | Location ]` lines), status and internal-state panels, HTML, HTML comments and reasoning blocks |
 | Keyboard shortcuts | On | `Alt+E`, `Alt+W`, `Alt+Z` inside the message box |
 | Also show the actions in the Extensions (wand) menu | On | Adds "Enhance my draft" and "Write something for me" to the wand menu |
@@ -232,7 +250,11 @@ Turn on **Log prompts and outputs**, or run `DraftEnhancer.getLastPrompt()` in t
 
 **The feather button does nothing on my phone.** Update to version 1.1.0 or newer (Extensions, Manage extensions, update, then reload the page). You can also use the **Enhance my draft** and **Write something for me** entries in the Extensions (wand) menu next to the message box, or the slash commands. If it still fails, open an issue and include your phone, browser, SillyTavern version and how you run SillyTavern (Termux or a remote server).
 
-**Write something for me ignores my preset.** Make sure **Generation mode** is **Preset** (updating from 1.0.x switches it automatically). Preset mode also uses the preset's **Impersonation prompt** (Chat Completion settings, Utility Prompts), so you can tune that prompt to change how your turns are written.
+**Write something for me ignores my preset.** Make sure **Generation mode** is **Preset** (updating from 1.0.x switches it automatically). Preset mode also uses the preset's **Impersonation prompt** (Chat Completion settings, Utility Prompts) and any prompt set to trigger on Impersonate, so you can tune those to change how your turns are written. Turn on **Log prompts and outputs** to see which instruction level (lean or full) was used for your preset.
+
+**The model copies the instruction into the message box.** Keep **Instruction placement** on **As your message at the end of the chat**.
+
+**Background mode adds a scene header or trackers to my message.** Many presets fire their narrator prompts on quiet requests too. Use Preset mode.
 
 **Header lines or status panels end up in my message.** Keep **Clean preset extras** on. If a preset uses a format the cleanup does not recognise, open an issue with an example of the raw output (enable **Log prompts and outputs**).
 

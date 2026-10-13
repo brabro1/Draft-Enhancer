@@ -42,6 +42,8 @@ const DEFAULTS = {
     writeExtra: '',
 
     cleanOutput: true, // remove headers, status/tracker panels, HTML and reasoning from the result
+    instructionDetail: 'auto', // 'auto' | 'full' | 'lean' (Preset mode)
+    instructionPlacement: 'chat', // 'chat' (your message at the end of the chat) | 'system' (final system note)
     historyDepth: 6,
     maxTokens: 0, // 0 = automatic (Background and Lightweight modes)
 };
@@ -93,7 +95,7 @@ function saveSettings() {
     ctx().saveSettingsDebounced();
 }
 
-const REASONING_TAGS = 'think|thinking|reasoning|thought|thoughts|cot|analysis|planning';
+const REASONING_TAGS = 'think|thinking|reasoning|thought|thoughts|cot|analysis|planning|checklist|internal_monologue';
 
 function stripReasoning(text) {
     const pair = new RegExp(`<(${REASONING_TAGS})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
@@ -244,6 +246,49 @@ const CREATIVITY_RULES = {
         'Treat the draft as a skeleton: keep its intent and key beats, but you may develop them with richer dialogue, inner thoughts and vivid detail, as long as nothing contradicts the draft.',
 };
 
+/* ------------------------------------------------------------------ */
+/* Preset awareness                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Looks at the active Chat Completion preset. Some presets are written for impersonation: they have prompts
+ * that fire only on Impersonate (their own "write the user's turn" instructions) and/or switch their narrator
+ * rules (headers, trackers, "never act for the user") off during Impersonate. For those, Draft Enhancer only
+ * adds what the preset cannot know (the draft, the direction, your settings) and lets the preset lead.
+ */
+function getPresetInfo() {
+    const c = ctx();
+    const info = { api: c.mainApi || '', name: '', impersonationAware: false, impersonateOnlyPrompts: 0, narratorOnlyPrompts: 0 };
+    try {
+        info.name = c.getPresetManager?.()?.getSelectedPresetName?.() || '';
+    } catch {
+        /* ignore */
+    }
+    const oai = c.chatCompletionSettings;
+    if (info.api !== 'openai' || !oai || !Array.isArray(oai.prompts)) return info;
+
+    const orders = Array.isArray(oai.prompt_order) ? oai.prompt_order : [];
+    const order = (orders.find((o) => String(o.character_id) === '100001') || orders[0])?.order || [];
+    const enabled = new Set(order.filter((o) => o.enabled).map((o) => o.identifier));
+
+    for (const pr of oai.prompts) {
+        if (!enabled.has(pr.identifier)) continue;
+        const trig = Array.isArray(pr.injection_trigger) ? pr.injection_trigger : [];
+        if (!trig.length) continue;
+        if (trig.includes('impersonate') && !trig.includes('normal')) info.impersonateOnlyPrompts++;
+        if (!trig.includes('impersonate')) info.narratorOnlyPrompts++;
+    }
+    info.impersonationAware = info.impersonateOnlyPrompts > 0 || info.narratorOnlyPrompts > 0;
+    return info;
+}
+
+/** 'full' = complete instruction; 'lean' = only what the preset cannot know. */
+function resolveDetail(s, viaPreset) {
+    if (!viaPreset) return 'full';
+    if (s.instructionDetail === 'full' || s.instructionDetail === 'lean') return s.instructionDetail;
+    return getPresetInfo().impersonationAware ? 'lean' : 'full';
+}
+
 /**
  * Presets usually tell the model never to act for {{user}} and to wrap every reply in extras (time/location
  * headers, status trackers, HTML panels, dice rolls). This lifts the first rule for this one reply and
@@ -258,10 +303,42 @@ function turnGuard(u, c) {
     ].join(' ');
 }
 
-function buildEnhanceTask(draft, s, viaPreset = false) {
+/** Settings the user changed from Auto, phrased as short rules (used by the lean instruction). */
+function forcedStyleRules(kind, s, draft) {
+    const { u } = names();
+    const rules = [];
+    if (s.pov !== 'auto') rules.push(`Perspective: ${povRule(kind, s, u)}`);
+    if (s.format !== 'auto') rules.push(formatRule(s, draft));
+    return rules;
+}
+
+function normalizeOpts(opts) {
+    if (typeof opts === 'boolean') return { viaPreset: opts, detail: 'full' };
+    return { viaPreset: !!opts?.viaPreset, detail: opts?.detail || 'full' };
+}
+
+function buildEnhanceTask(draft, s, opts = {}) {
+    const { viaPreset, detail } = normalizeOpts(opts);
     const { u, c } = names();
     const t = computeTarget('enhance', wordCount(draft), s);
     const extra = String(s.enhanceExtra || '').trim();
+
+    if (viaPreset && detail === 'lean') {
+        const rules = [
+            `Faithfulness: ${CREATIVITY_RULES[s.creativity] || CREATIVITY_RULES.balanced} Never contradict the draft. Keep its meaning, tone and intensity.`,
+            `Length: ${lengthRule('enhance', s, t)}`,
+            `Language: ${languageRule('enhance', s)}`,
+            ...forcedStyleRules('enhance', s, draft),
+        ];
+        if (extra) rules.push(`Player's notes: ${extra}`);
+        const prompt = [
+            `[${u}'s turn: the player wrote a rough draft of ${u}'s next message. Turn it into ${u}'s finished message, following all of your instructions for ${u}'s turn.]`,
+            `<draft>\n${draft}\n</draft>`,
+            rules.map((r) => `- ${r}`).join('\n'),
+            `Output only ${u}'s finished message, starting with ${u}'s first word or action.`,
+        ].join('\n\n');
+        return { kind: 'enhance', prompt, t, draft, detail };
+    }
 
     const head = viaPreset
         ? [
@@ -290,14 +367,29 @@ function buildEnhanceTask(draft, s, viaPreset = false) {
     tail.push('Output ONLY the finished message text: no preface, labels, notes, <draft> tags, or quotation marks wrapped around the whole message.');
 
     const prompt = [...head, reqs.join('\n'), ...tail].join('\n\n');
-    return { kind: 'enhance', prompt, t, draft };
+    return { kind: 'enhance', prompt, t, draft, detail: 'full' };
 }
 
-function buildWriteTask(direction, s, viaPreset = false) {
+function buildWriteTask(direction, s, opts = {}) {
+    const { viaPreset, detail } = normalizeOpts(opts);
     const { u, c } = names();
     const t = computeTarget('write', wordCount(direction), s);
     const extra = String(s.writeExtra || '').trim();
     const dir = String(direction || '').trim();
+
+    if (viaPreset && detail === 'lean') {
+        // The preset already knows how to write the user's turn. Add only what it cannot know.
+        const rules = [...forcedStyleRules('write', s, dir)];
+        if (Number(s.writeWords) > 0) rules.push(`Length: ${lengthRule('write', s, t)}`);
+        if (s.language !== 'draft') rules.push(`Language: ${languageRule('write', s)}`);
+        if (extra) rules.push(`Player's notes: ${extra}`);
+        if (!dir && !rules.length) return { kind: 'write', prompt: '', t, draft: dir, detail }; // pure native Impersonate
+        const parts = [`[${u}'s turn: write ${u}'s next message.]`];
+        if (dir) parts.push(`What ${u} does or says next (follow it closely):\n<direction>\n${dir}\n</direction>`);
+        if (rules.length) parts.push(rules.map((r) => `- ${r}`).join('\n'));
+        parts.push(`Output only ${u}'s message, starting with ${u}'s first word or action.`);
+        return { kind: 'write', prompt: parts.join('\n\n'), t, draft: dir, detail };
+    }
 
     const head = viaPreset
         ? [`[OOC: ${u}'s turn. Write ${u}'s next message, continuing naturally from the latest events.]`, turnGuard(u, c)]
@@ -325,7 +417,7 @@ function buildWriteTask(direction, s, viaPreset = false) {
     tail.push('Output ONLY the finished message text: no preface, labels, notes, <direction> tags, or quotation marks wrapped around the whole message.');
 
     const prompt = [...head, reqs.join('\n'), ...tail].join('\n\n');
-    return { kind: 'write', prompt, t, draft: dir };
+    return { kind: 'write', prompt, t, draft: dir, detail: 'full' };
 }
 
 /** Compact context used by the lightweight (raw) mode. */
@@ -413,23 +505,44 @@ function cleanOutput(raw, { deep = true } = {}) {
 /* Generation                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Preset mode: SillyTavern's Impersonate pipeline, with our instruction as the final prompt. */
-async function generateViaPreset(task) {
+const INJECT_KEY = 'draft_enhancer_instruction';
+const IN_CHAT = 1; // extension_prompt_types.IN_CHAT
+const ROLE_USER = 1; // extension_prompt_roles.USER
+
+/**
+ * Preset mode: SillyTavern's Impersonate pipeline. The instruction is added either as a user message at the
+ * end of the chat (merged with the preset's own impersonation message, if it has one) or as SillyTavern's
+ * final quiet prompt (system role). With nothing to add, it is a plain Impersonate.
+ */
+async function generateViaPreset(task, s) {
     const c = ctx();
     if (typeof c.generate !== 'function') {
         throw new Error('This SillyTavern version does not support Preset mode. Update SillyTavern or switch the mode in the Draft Enhancer settings.');
     }
     state.lastPrompt = task.prompt;
 
+    const useChat = task.prompt && s.instructionPlacement !== 'system' && typeof c.setExtensionPrompt === 'function';
+    const options = {};
+    if (task.prompt && !useChat) Object.assign(options, { quiet_prompt: task.prompt, quietToLoud: true });
+
     // Same as SillyTavern's /impersonate: start from an empty box (the draft is already captured).
     setBoxText('', false);
 
     let ret;
     try {
-        ret = await c.generate('impersonate', { quiet_prompt: task.prompt, quietToLoud: true });
+        if (useChat) c.setExtensionPrompt(INJECT_KEY, task.prompt, IN_CHAT, 0, false, ROLE_USER);
+        ret = await c.generate('impersonate', options);
     } catch (err) {
         if (state.cancelled) throw new CancelledError();
         throw err;
+    } finally {
+        if (useChat) {
+            try {
+                c.setExtensionPrompt(INJECT_KEY, '', IN_CHAT, 0, false, ROLE_USER);
+            } catch {
+                /* ignore */
+            }
+        }
     }
     if (state.cancelled) throw new CancelledError();
 
@@ -469,11 +582,11 @@ async function generate(task) {
     updateButton();
 
     try {
-        const out = s.mode === 'preset' ? await generateViaPreset(task) : await generateDetached(task, s);
+        const out = s.mode === 'preset' ? await generateViaPreset(task, s) : await generateDetached(task, s);
         if (state.cancelled) throw new CancelledError();
 
         state.lastOutput = String(out ?? '');
-        if (s.debug) console.log(TAG, `mode=${s.mode}\nprompt:\n${state.lastPrompt}\n\noutput:\n${state.lastOutput}`);
+        if (s.debug) console.log(TAG, `mode=${s.mode} detail=${task.detail} preset=${JSON.stringify(getPresetInfo())}\nprompt:\n${state.lastPrompt || '(none: plain Impersonate)'}\n\noutput:\n${state.lastOutput}`);
 
         const cleaned = cleanOutput(out, { deep: !!s.cleanOutput });
         if (!cleaned) {
@@ -550,7 +663,8 @@ async function runTask(kind, overrideText) {
     try {
         let result;
         for (;;) {
-            const task = kind === 'enhance' ? buildEnhanceTask(input, s, viaPreset) : buildWriteTask(input, s, viaPreset);
+            const opts = { viaPreset, detail: resolveDetail(s, viaPreset) };
+            const task = kind === 'enhance' ? buildEnhanceTask(input, s, opts) : buildWriteTask(input, s, opts);
             result = await generate(task);
             if (!s.preview) break;
 
@@ -896,6 +1010,24 @@ const SETTINGS_HTML = `
         </select>
         <small>Preset mode uses everything the Impersonate button uses: your preset with its jailbreak and toggles, its Impersonation prompt and prefill, lorebooks and chat history. The result streams into the message box. Use the other modes only if a preset misbehaves.</small>
       </div>
+      <div class="de-grid">
+        <div class="de-row">
+          <label>Instruction detail (Preset mode)</label>
+          <select class="text_pole" data-key="instructionDetail">
+            <option value="auto">Auto: adapt to the preset</option>
+            <option value="lean">Lean: let the preset lead</option>
+            <option value="full">Full: complete instruction</option>
+          </select>
+        </div>
+        <div class="de-row">
+          <label>Instruction placement (Preset mode)</label>
+          <select class="text_pole" data-key="instructionPlacement">
+            <option value="chat">As your message at the end of the chat</option>
+            <option value="system">As a final system note</option>
+          </select>
+        </div>
+      </div>
+      <small>Auto uses a short instruction when the preset has its own Impersonate prompts, and a full one when it does not. With Lean and nothing typed, "Write something for me" is a plain Impersonate.</small>
       <label class="checkbox_label"><input type="checkbox" data-key="preview"><span>Preview before applying (Use / Retry / Cancel)</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="autoSend"><span>Send automatically after generating</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="cleanOutput"><span>Clean preset extras from the result (headers, status panels, HTML, reasoning)</span></label>
@@ -1097,6 +1229,8 @@ globalThis.DraftEnhancer = {
         buildEnhanceTask,
         buildWriteTask,
         buildRawContext,
+        getPresetInfo,
+        resolveDetail,
         cleanOutput,
         stripReasoning,
         detectFormat,
