@@ -31,7 +31,6 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - [For developers](#for-developers)
 - [Updating and uninstalling](#updating-and-uninstalling)
 - [License](#license)
-- [العربية](#العربية)
 
 ---
 
@@ -42,7 +41,7 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - **Faithful to your intent.** Your actions, dialogue and decisions are kept in order. A creativity setting controls how much new detail may be added.
 - **Matches your style.** Perspective, tense and formatting (`*actions*` with `"dialogue"`, or plain prose) are detected from your draft and earlier messages, or forced from the settings.
 - **Never speaks for the character.** The instruction forbids writing the character's dialogue, actions or reactions.
-- **Any language.** Output in the language of your draft, the language of the chat, or a custom language. Arabic drafts are supported, including the token budget.
+- **Any language.** Output in the language of your draft, the language of the chat, or a custom language.
 - **Length control.** Light polish, balanced, rich, or match the length of the character's last message, with minimum and maximum word limits.
 - **Safe to use.** Optional preview window (Use / Retry / Cancel), one-step Undo, cancel while generating, and the original draft is never lost on errors.
 - **Fast access.** Send-bar button, keyboard shortcuts and slash commands.
