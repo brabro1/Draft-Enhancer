@@ -1,24 +1,27 @@
 /*
  * Draft Enhancer — SillyTavern extension
  *
- *  • Enhance my draft   : takes whatever is in the message box (even a few words) and rewrites it
- *                         into a full, polished roleplay message that fits the chat.
- *  • Write something for me : writes {{user}}'s next message for you (optionally steered by what you typed).
+ *  • Enhance my draft        : rewrites whatever is in the message box (even a few words) into a full,
+ *                              polished roleplay message that fits the chat.
+ *  • Write something for me  : writes {{user}}'s next message (optionally steered by what you typed).
  *
- * Two generation modes:
- *  • "Full context" (default): uses SillyTavern's normal prompt pipeline (your preset, character card,
- *    persona, lorebook, author's note, chat history) plus a rewrite instruction. Results follow the
- *    model and preset you're using.
- *  • "Lightweight": sends only a compact context (card + persona + last few messages). Fast and cheap,
- *    and immune to presets that force the model to "continue the roleplay" instead of rewriting.
+ * Generation modes:
+ *  • "Preset" (default): runs through SillyTavern's own Impersonate pipeline, the same one the
+ *    Impersonate button uses. Your preset (main prompt, jailbreak, post-history instructions, all enabled
+ *    toggles), its Impersonation prompt and impersonation prefill, lorebooks, author's note, persona and
+ *    chat history are all applied, plus a short instruction for the task. Streams into the message box.
+ *  • "Background": a quiet request with the full context but without the preset's impersonation settings.
+ *  • "Lightweight": sends only a compact context (card + persona + last few messages).
  */
 
 const MODULE_NAME = 'draftEnhancer';
 const TAG = '[Draft Enhancer]';
+const SETTINGS_VERSION = 2;
 
 const DEFAULTS = {
+    settingsVersion: SETTINGS_VERSION,
     enabled: true,
-    mode: 'context', // 'context' | 'raw'
+    mode: 'preset', // 'preset' | 'context' | 'raw'
     preview: false,
     autoSend: false,
     shortcuts: true,
@@ -35,11 +38,12 @@ const DEFAULTS = {
     customLanguage: '',
     enhanceExtra: '',
 
-    writeWords: 0, // 0 = match the length of the last character message
+    writeWords: 0, // 0 = automatic (based on your own recent messages)
     writeExtra: '',
 
+    cleanOutput: true, // remove headers, status/tracker panels, HTML and reasoning from the result
     historyDepth: 6,
-    maxTokens: 0, // 0 = automatic
+    maxTokens: 0, // 0 = automatic (Background and Lightweight modes)
 };
 
 const state = {
@@ -72,6 +76,13 @@ function getSettings() {
     const { extensionSettings } = ctx();
     if (!extensionSettings[MODULE_NAME]) extensionSettings[MODULE_NAME] = {};
     const s = extensionSettings[MODULE_NAME];
+
+    // Migration: 1.0.x saved 'context' as the default mode. Move those users to the new preset mode once.
+    if (Object.keys(s).length && (s.settingsVersion ?? 1) < 2) {
+        if (s.mode === 'context' || s.mode === undefined) s.mode = 'preset';
+        s.settingsVersion = SETTINGS_VERSION;
+    }
+
     for (const key of Object.keys(DEFAULTS)) {
         if (s[key] === undefined) s[key] = DEFAULTS[key];
     }
@@ -82,11 +93,13 @@ function saveSettings() {
     ctx().saveSettingsDebounced();
 }
 
+const REASONING_TAGS = 'think|thinking|reasoning|thought|thoughts|cot|analysis|planning';
+
 function stripReasoning(text) {
-    return String(text ?? '')
-        .replace(/<(think|thinking|reasoning|thought)>[\s\S]*?<\/\1>/gi, '')
-        .replace(/^[\s\S]*?<\/(think|thinking|reasoning|thought)>/i, '')
-        .replace(/<(think|thinking|reasoning|thought)>[\s\S]*$/i, '');
+    const pair = new RegExp(`<(${REASONING_TAGS})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
+    const orphanClose = new RegExp(`^[\\s\\S]*?<\\/(${REASONING_TAGS})>`, 'i');
+    const unclosed = new RegExp(`<(${REASONING_TAGS})\\b[^>]*>[\\s\\S]*$`, 'i');
+    return String(text ?? '').replace(pair, '').replace(orphanClose, '').replace(unclosed, '');
 }
 
 /** Message text with reasoning blocks and HTML tags removed (keeps line breaks). */
@@ -104,6 +117,13 @@ function lastCharacterWords() {
         if (!msgs[i].is_user) return wordCount(messageText(msgs[i]));
     }
     return 0;
+}
+
+/** Average length of the user's last few messages (0 if none). */
+function userAverageWords(count = 4) {
+    const mine = chatMessages().filter((m) => m.is_user).slice(-count);
+    if (!mine.length) return 0;
+    return Math.round(mine.reduce((sum, m) => sum + wordCount(messageText(m)), 0) / mine.length);
 }
 
 function names() {
@@ -150,7 +170,13 @@ function computeTarget(kind, draftWords, s) {
     let target;
 
     if (kind === 'write') {
-        target = Number(s.writeWords) > 0 ? Number(s.writeWords) : lastWords || 120;
+        if (Number(s.writeWords) > 0) {
+            target = Number(s.writeWords);
+        } else {
+            // Automatic: a bit richer than your own recent turns, never tiny, never a whole narrator reply.
+            const avg = userAverageWords();
+            target = avg ? Math.max(avg * 1.3, minW + 20) : 120;
+        }
         target = clamp(Math.round(target), 20, maxW);
     } else {
         switch (s.length) {
@@ -211,23 +237,43 @@ function languageRule(kind, s) {
 
 const CREATIVITY_RULES = {
     faithful:
-        "Do not add actions, events, decisions or dialogue content the draft does not already imply. Expand only through HOW things are done: sensory detail, body language, tone of voice, inner feeling and atmosphere.",
+        'Do not add actions, events, decisions or dialogue content the draft does not already imply. Expand only through HOW things are done: sensory detail, body language, tone of voice, inner feeling and atmosphere.',
     balanced:
-        "Keep every action and line of dialogue from the draft, in the same order. You may add small supporting beats (gestures, expressions, reactions to the surroundings, natural connecting phrases) but nothing that changes what the character does, decides or says, and no major new events.",
+        'Keep every action and line of dialogue from the draft, in the same order. You may add small supporting beats (gestures, expressions, reactions to the surroundings, natural connecting phrases) but nothing that changes what the character does, decides or says, and no major new events.',
     creative:
-        "Treat the draft as a skeleton: keep its intent and key beats, but you may develop them with richer dialogue, inner thoughts and vivid detail, as long as nothing contradicts the draft.",
+        'Treat the draft as a skeleton: keep its intent and key beats, but you may develop them with richer dialogue, inner thoughts and vivid detail, as long as nothing contradicts the draft.',
 };
 
-function buildEnhanceTask(draft, s) {
+/**
+ * Presets usually tell the model never to act for {{user}} and to wrap every reply in extras (time/location
+ * headers, status trackers, HTML panels, dice rolls). This lifts the first rule for this one reply and
+ * keeps the extras out, while keeping the preset's style rules in force.
+ */
+function turnGuard(u, c) {
+    return [
+        `This reply is ${u}'s own message, written on the player's behalf. Any instruction not to act, speak, think or decide for ${u} is lifted for this reply only.`,
+        `Keep following your other instructions for prose style, tone, vocabulary, banned words and content.`,
+        `Leave out everything that belongs only to ${c}'s or the narrator's replies: response headers (time, date, location, weather), status panels, internal-state or tracker blocks, HTML, dice rolls, NPC actions and OOC notes. Response-length targets for ${c}'s replies do not apply here.`,
+        'If you reason first, keep all reasoning inside think tags and put only the finished message after them.',
+    ].join(' ');
+}
+
+function buildEnhanceTask(draft, s, viaPreset = false) {
     const { u, c } = names();
     const t = computeTarget('enhance', wordCount(draft), s);
     const extra = String(s.enhanceExtra || '').trim();
 
-    const head = [
-        `[OOC TASK: REWRITE. This is NOT a roleplay turn. Do not reply to or continue the story as ${c}. Write no commentary, notes or explanations.]`,
-        `The player typed a rough draft of ${u}'s next message. Rewrite it into the finished message ${u} sends in this roleplay. Use everything you know about this chat (scene, setting, characters, relationships, established tone and writing style) so the result fits seamlessly.`,
-        `<draft>\n${draft}\n</draft>`,
-    ];
+    const head = viaPreset
+        ? [
+              `[OOC: ${u}'s turn. Rewrite the player's rough draft below into the finished message ${u} sends next. Do not reply to it or continue the story as ${c}.]`,
+              turnGuard(u, c),
+              `<draft>\n${draft}\n</draft>`,
+          ]
+        : [
+              `[OOC TASK: REWRITE. This is NOT a roleplay turn. Do not reply to or continue the story as ${c}. Write no commentary, notes or explanations.]`,
+              `The player typed a rough draft of ${u}'s next message. Rewrite it into the finished message ${u} sends in this roleplay. Use everything you know about this chat (scene, setting, characters, relationships, established tone and writing style) so the result fits seamlessly.`,
+              `<draft>\n${draft}\n</draft>`,
+          ];
     const reqs = [
         'Requirements:',
         `1. Faithfulness: ${CREATIVITY_RULES[s.creativity] || CREATIVITY_RULES.balanced} Never contradict the draft or the established story. Preserve the draft's meaning, tone and level of intensity; do not editorialize or add disclaimers.`,
@@ -247,19 +293,23 @@ function buildEnhanceTask(draft, s) {
     return { kind: 'enhance', prompt, t, draft };
 }
 
-function buildWriteTask(direction, s) {
+function buildWriteTask(direction, s, viaPreset = false) {
     const { u, c } = names();
     const t = computeTarget('write', wordCount(direction), s);
     const extra = String(s.writeExtra || '').trim();
     const dir = String(direction || '').trim();
 
-    const head = [
-        `[OOC TASK: WRITE ${u.toUpperCase()}'S TURN. Do not write as ${c}. Write no commentary, notes or explanations.]`,
-        `Write ${u}'s next message in this roleplay, as ${u}, continuing naturally from the latest events. Use everything you know about this chat (scene, setting, characters, relationships, established tone and writing style) so it fits seamlessly.`,
+    const head = viaPreset
+        ? [`[OOC: ${u}'s turn. Write ${u}'s next message, continuing naturally from the latest events.]`, turnGuard(u, c)]
+        : [
+              `[OOC TASK: WRITE ${u.toUpperCase()}'S TURN. Do not write as ${c}. Write no commentary, notes or explanations.]`,
+              `Write ${u}'s next message in this roleplay, as ${u}, continuing naturally from the latest events. Use everything you know about this chat (scene, setting, characters, relationships, established tone and writing style) so it fits seamlessly.`,
+          ];
+    head.push(
         dir
             ? `The player's direction (follow it closely; it is what ${u} wants to do or say next):\n<direction>\n${dir}\n</direction>`
             : `No direction was given. Choose a natural, in-character next move for ${u} that fits the scene, moves the story forward and gives ${c} something to respond to.`,
-    ];
+    );
     const reqs = [
         'Requirements:',
         `1. Voice: match ${u}'s established voice (diction, personality, formality) from their earlier messages, with the descriptive richness of the chat's best writing, without copying earlier phrases.`,
@@ -317,68 +367,117 @@ const RAW_SYSTEM =
     'You are a skilled roleplay co-writer and editor. You follow the task precisely and output only the requested text.';
 
 /* ------------------------------------------------------------------ */
-/* Generation                                                          */
+/* Output cleanup                                                      */
 /* ------------------------------------------------------------------ */
 
-function cleanOutput(raw) {
+// Blocks that never belong in the player's message: removed together with their content.
+const DROP_BLOCKS = 'details|summary|internal_states|internal_state|status|stats|tracker|trackers|style|script|table|header|gm_notes|ooc';
+
+function removePairedBlocks(text, tags) {
+    // Innermost first, repeated, so nested panels (<details> inside <details>) are fully removed.
+    const re = new RegExp(`<(${tags})\\b[^>]*>(?:(?!<(?:${tags})\\b)[\\s\\S])*?<\\/\\1\\s*>`, 'gi');
+    let prev;
+    let guard = 0;
+    do {
+        prev = text;
+        text = text.replace(re, '');
+    } while (text !== prev && ++guard < 20);
+    return text;
+}
+
+/** Removes preset extras (headers, panels, HTML, reasoning) and wrapper noise from the model output. */
+function cleanOutput(raw, { deep = true } = {}) {
     let t = stripReasoning(raw).trim();
     t = t.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
+
+    if (deep) {
+        t = t.replace(/<!--[\s\S]*?-->/g, '');
+        t = removePairedBlocks(t, DROP_BLOCKS);
+        t = t.replace(new RegExp(`<(${DROP_BLOCKS})\\b[\\s\\S]*$`, 'i'), ''); // cut-off panel at the end
+        const withoutTags = t.replace(/<\/?[a-z][\w-]*(\s[^<>]*)?\/?>/gi, ''); // keep text inside other tags (e.g. <font>)
+        t = withoutTags;
+        // Status headers such as "[ 🕰️ 08:15 AM | Day 3 | 📍 Tavern | ☀️ 70°F ]"
+        t = t.replace(/^\s*\[[^\]\n]*\|[^\]\n]*\|[^\]\n]*\]\s*$/gm, '');
+    }
+
     t = t.replace(/<\/?(draft|direction|rewrite|rewritten|output)>/gi, '');
     t = t.replace(/^\s*(\*\*)?(rewritten|enhanced|revised|final)(\s+(message|draft|version|text))?(\*\*)?\s*[:：-]\s*(\*\*)?\s*/i, '');
     const { u } = names();
     const esc = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     t = t.replace(new RegExp(`^\\s*${esc}\\s*:\\s*`, 'i'), '');
+    t = t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
     return t.trim();
 }
 
-async function generate(task) {
-    const c = ctx();
-    const s = getSettings();
-    const maxTokens =
-        Number(s.maxTokens) > 0
-            ? Number(s.maxTokens)
-            : clamp(Math.round(task.t.hi * 4) + 150, 300, 3000);
+/* ------------------------------------------------------------------ */
+/* Generation                                                          */
+/* ------------------------------------------------------------------ */
 
+/** Preset mode: SillyTavern's Impersonate pipeline, with our instruction as the final prompt. */
+async function generateViaPreset(task) {
+    const c = ctx();
+    if (typeof c.generate !== 'function') {
+        throw new Error('This SillyTavern version does not support Preset mode. Update SillyTavern or switch the mode in the Draft Enhancer settings.');
+    }
+    state.lastPrompt = task.prompt;
+
+    // Same as SillyTavern's /impersonate: start from an empty box (the draft is already captured).
+    setBoxText('', false);
+
+    let ret;
+    try {
+        ret = await c.generate('impersonate', { quiet_prompt: task.prompt, quietToLoud: true });
+    } catch (err) {
+        if (state.cancelled) throw new CancelledError();
+        throw err;
+    }
+    if (state.cancelled) throw new CancelledError();
+
+    const boxText = String(document.getElementById('send_textarea')?.value ?? '');
+    const retText = typeof ret === 'string' || ret instanceof String ? String(ret) : '';
+    return boxText.trim() ? boxText : retText;
+}
+
+/** Background and Lightweight modes: a separate request that does not touch the message box. */
+async function generateDetached(task, s) {
+    const c = ctx();
+    const maxTokens = Number(s.maxTokens) > 0 ? Number(s.maxTokens) : clamp(Math.round(task.t.hi * 4) + 150, 300, 3000);
+
+    if (s.mode === 'raw') {
+        const context = buildRawContext(s);
+        const prompt = (context ? context + '\n\n' : '') + task.prompt;
+        state.lastPrompt = `${RAW_SYSTEM}\n\n${prompt}`;
+        return await callCompat(
+            c.generateRaw,
+            { prompt, api: null, instructOverride: false, quietToLoud: false, systemPrompt: RAW_SYSTEM, responseLength: maxTokens },
+            [prompt, null, false, false, RAW_SYSTEM, maxTokens],
+        );
+    }
+
+    state.lastPrompt = task.prompt;
+    return await callCompat(
+        c.generateQuietPrompt,
+        { quietPrompt: task.prompt, quietToLoud: false, skipWIAN: false, responseLength: maxTokens, removeReasoning: true },
+        [task.prompt, false, false, null, null, maxTokens],
+    );
+}
+
+async function generate(task) {
+    const s = getSettings();
     state.cancelled = false;
     state.generating = true;
     updateButton();
 
     try {
-        let out;
-        if (s.mode === 'raw') {
-            const context = buildRawContext(s);
-            const prompt = (context ? context + '\n\n' : '') + task.prompt;
-            state.lastPrompt = `${RAW_SYSTEM}\n\n${prompt}`;
-            out = await callCompat(
-                c.generateRaw,
-                { prompt, api: null, instructOverride: false, quietToLoud: false, systemPrompt: RAW_SYSTEM, responseLength: maxTokens },
-                [prompt, null, false, false, RAW_SYSTEM, maxTokens],
-            );
-        } else {
-            state.lastPrompt = task.prompt;
-            out = await callCompat(
-                c.generateQuietPrompt,
-                {
-                    quietPrompt: task.prompt,
-                    quietToLoud: false,
-                    skipWIAN: false,
-                    responseLength: maxTokens,
-                    removeReasoning: true,
-                },
-                [task.prompt, false, false, null, null, maxTokens],
-            );
-        }
-
+        const out = s.mode === 'preset' ? await generateViaPreset(task) : await generateDetached(task, s);
         if (state.cancelled) throw new CancelledError();
 
         state.lastOutput = String(out ?? '');
-        if (s.debug) console.log(TAG, 'prompt:\n' + state.lastPrompt, '\noutput:\n' + state.lastOutput);
+        if (s.debug) console.log(TAG, `mode=${s.mode}\nprompt:\n${state.lastPrompt}\n\noutput:\n${state.lastOutput}`);
 
-        const cleaned = cleanOutput(out);
+        const cleaned = cleanOutput(out, { deep: !!s.cleanOutput });
         if (!cleaned) {
-            throw new Error(
-                'The model returned an empty response. If you use a reasoning model, raise "Max tokens" in the Draft Enhancer settings.',
-            );
+            throw new Error('The model returned an empty response. Check the API connection, or raise the response length (max tokens) if you use a reasoning model.');
         }
         return cleaned;
     } catch (err) {
@@ -404,11 +503,12 @@ function cancelGeneration() {
 /* Main flow                                                           */
 /* ------------------------------------------------------------------ */
 
-function setBoxText(text) {
+function setBoxText(text, focus = true) {
     const ta = document.getElementById('send_textarea');
     if (!ta) return;
     ta.value = text;
     ta.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!focus) return;
     ta.focus();
     try {
         ta.setSelectionRange(text.length, text.length);
@@ -442,6 +542,7 @@ async function runTask(kind, overrideText) {
         return null;
     }
 
+    const viaPreset = s.mode === 'preset';
     state.busy = true;
     closeMenu();
     updateButton();
@@ -449,17 +550,21 @@ async function runTask(kind, overrideText) {
     try {
         let result;
         for (;;) {
-            const task = kind === 'enhance' ? buildEnhanceTask(input, s) : buildWriteTask(input, s);
+            const task = kind === 'enhance' ? buildEnhanceTask(input, s, viaPreset) : buildWriteTask(input, s, viaPreset);
             result = await generate(task);
             if (!s.preview) break;
 
+            if (viaPreset) setBoxText(original, false);
             const decision = await showPreview(input, result, kind);
             if (decision.action === 'retry') continue;
             if (decision.action === 'cancel') return null;
             result = decision.text.trim();
             break;
         }
-        if (!result) return null;
+        if (!result) {
+            if (viaPreset) setBoxText(original, false);
+            return null;
+        }
 
         state.undoText = original;
         setBoxText(result);
@@ -467,6 +572,7 @@ async function runTask(kind, overrideText) {
         if (s.autoSend) $('#send_but').trigger('click');
         return result;
     } catch (err) {
+        if (viaPreset) setBoxText(original, false); // never lose the draft
         if (err instanceof CancelledError) {
             toastr.info('Cancelled', 'Draft Enhancer', { timeOut: 1500 });
         } else {
@@ -508,21 +614,21 @@ function updateButton() {
     $('#de_ext_enhance, #de_ext_write').toggleClass('displayNone', !enabled);
 }
 
-/** Phones, tablets and narrow windows get a centered sheet instead of a popup anchored to the button. */
+/** Touch screens get slightly larger menu rows (same popup position as on desktop). */
 function isTouchLayout() {
     try {
-        return window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
+        return window.matchMedia('(pointer: coarse)').matches;
     } catch {
-        return window.innerWidth <= 800;
+        return false;
     }
 }
 
 /*
- * The menu and the preview window are native <dialog> elements. Opened with showModal() they live in the
- * browser's top layer, which is positioned against the screen itself. This keeps them on-screen even when a
- * theme or another extension transforms or resizes the page (which breaks normal position:fixed elements).
+ * The menu and the preview window are native <dialog> elements opened with showModal(). That puts them in
+ * the browser's top layer, positioned against the screen itself, so they stay on-screen even when a theme
+ * or another extension transforms or resizes the page (which breaks normal position:fixed elements).
  */
-function openDialog(el, modal) {
+function openDialog(el, modal = true) {
     try {
         if (modal && typeof el.showModal === 'function') return el.showModal();
         if (typeof el.show === 'function') return el.show();
@@ -549,31 +655,32 @@ function closeMenu() {
     closeDialog(menuEl());
 }
 
+/** Small popup anchored above the feather button, kept inside the screen. Same on phone and desktop. */
+function positionMenu(m) {
+    const btn = document.getElementById('de_button');
+    const rect = btn ? btn.getBoundingClientRect() : { left: 8, top: window.innerHeight - 8 };
+    const width = m.offsetWidth;
+    const height = m.offsetHeight;
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const vh = window.innerHeight;
+    const left = clamp(rect.left, 8, Math.max(8, vw - width - 8));
+    let top = rect.top - height - 8;
+    if (top < 8) top = clamp((rect.bottom ?? rect.top) + 8, 8, Math.max(8, vh - height - 8)); // no room above: open below
+    m.style.left = `${Math.round(left)}px`;
+    m.style.top = `${Math.round(top)}px`;
+    m.style.visibility = 'visible';
+}
+
 function toggleMenu() {
     const m = menuEl();
     if (!m) return;
     if (isMenuOpen()) return closeMenu();
 
     $(m).find('[data-action="undo"]').toggleClass('de-disabled', state.undoText === null);
-
-    if (isTouchLayout()) {
-        // Centered sheet in the top layer, with a dimmed backdrop. Tap the backdrop to close.
-        m.classList.add('de-sheet');
-        m.removeAttribute('style');
-        openDialog(m, true);
-        return;
-    }
-
-    // Desktop: small popup anchored above the button.
-    m.classList.remove('de-sheet');
-    m.style.cssText = 'visibility:hidden;left:0;top:0;bottom:auto';
-    openDialog(m, false);
-    const rect = document.getElementById('de_button').getBoundingClientRect();
-    const width = m.offsetWidth;
-    const height = m.offsetHeight;
-    const left = clamp(rect.left, 8, Math.max(8, window.innerWidth - width - 8));
-    const top = clamp(rect.top - height - 8, 8, Math.max(8, window.innerHeight - height - 8));
-    m.style.cssText = `left:${left}px;top:${top}px;bottom:auto;visibility:visible`;
+    m.classList.toggle('de-touch', isTouchLayout());
+    m.style.cssText = 'visibility:hidden;left:0;top:0';
+    openDialog(m, true);
+    positionMenu(m);
 }
 
 function runAction(action) {
@@ -603,7 +710,7 @@ function buildUI() {
         </dialog>
     `);
 
-    // Second entry point: SillyTavern's own Extensions (wand) menu, which is reliable on phones.
+    // Second entry point: SillyTavern's own Extensions (wand) menu.
     const $ext = $('#extensionsMenu');
     if ($ext.length && getSettings().extMenu) {
         const item = (id, icon, label) =>
@@ -663,14 +770,14 @@ function bindGlobalEvents() {
             return runTask(ext.id === 'de_ext_write' ? 'write' : 'enhance');
         }
 
-        // Tap outside the popup, or on the sheet's backdrop (which targets the <dialog> element itself).
-        if (t.id === 'de_menu' || !t.closest('#de_menu')) closeMenu();
+        // A click outside the popup lands on its (invisible) backdrop, which targets the <dialog> itself.
+        if (isMenuOpen() && (t.id === 'de_menu' || !t.closest('#de_menu'))) closeMenu();
     };
 
-    // Keep focus (and the on-screen keyboard) in the message box when tapping our controls.
+    // Do not steal focus from the message box when pressing the feather button.
     const mousedown = (e) => {
         const t = e.target instanceof Element ? e.target : null;
-        if (t && t.closest('#de_button, #de_menu, #de_ext_enhance, #de_ext_write')) e.preventDefault();
+        if (t && t.closest('#de_button, #de_ext_enhance, #de_ext_write')) e.preventDefault();
     };
 
     window.addEventListener('click', click, true);
@@ -684,11 +791,12 @@ function bindGlobalEvents() {
         }
     });
 
-    $(document).on('keydown.de', (e) => {
-        if (e.key === 'Escape') closeMenu();
+    // Reposition / close the popup when the screen changes (rotation, on-screen keyboard).
+    $(window).off('.de').on('resize.de', () => {
+        if (isMenuOpen()) positionMenu(menuEl());
     });
 
-    // Keyboard shortcuts (based on physical key positions, so they work with any keyboard layout). Only inside the message box.
+    // Keyboard shortcuts (based on physical key positions, so they work with any keyboard layout).
     $(document).on('keydown.de', '#send_textarea', (e) => {
         if (!getSettings().shortcuts || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
         const map = { KeyE: () => runTask('enhance'), KeyW: () => runTask('write'), KeyZ: undoLast };
@@ -701,7 +809,7 @@ function bindGlobalEvents() {
 }
 
 /* ------------------------------------------------------------------ */
-/* UI: preview modal                                                   */
+/* UI: preview window                                                  */
 /* ------------------------------------------------------------------ */
 
 function showPreview(original, result, kind) {
@@ -782,13 +890,15 @@ const SETTINGS_HTML = `
       <div class="de-row">
         <label>Generation mode</label>
         <select class="text_pole" data-key="mode">
-          <option value="context">Full context (uses your preset, card, lorebook, history)</option>
-          <option value="raw">Lightweight (card + persona + last messages only)</option>
+          <option value="preset">Preset (recommended): same pipeline as Impersonate</option>
+          <option value="context">Background: full context, no impersonation settings</option>
+          <option value="raw">Lightweight: card + persona + last messages only</option>
         </select>
-        <small>Full context follows your model and preset. If a preset makes the model reply as the character instead of rewriting, switch to Lightweight.</small>
+        <small>Preset mode uses everything the Impersonate button uses: your preset with its jailbreak and toggles, its Impersonation prompt and prefill, lorebooks and chat history. The result streams into the message box. Use the other modes only if a preset misbehaves.</small>
       </div>
       <label class="checkbox_label"><input type="checkbox" data-key="preview"><span>Preview before applying (Use / Retry / Cancel)</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="autoSend"><span>Send automatically after generating</span></label>
+      <label class="checkbox_label"><input type="checkbox" data-key="cleanOutput"><span>Clean preset extras from the result (headers, status panels, HTML, reasoning)</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="shortcuts"><span>Keyboard shortcuts in the message box (Alt+E enhance, Alt+W write, Alt+Z undo)</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="extMenu"><span>Also show the actions in the Extensions (wand) menu</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="debug"><span>Log prompts and outputs to the browser console</span></label>
@@ -857,9 +967,9 @@ const SETTINGS_HTML = `
 
       <h4>Write something for me</h4>
       <div class="de-row">
-        <label>Target words (0 = match the last character message)</label>
+        <label>Target words (0 = automatic)</label>
         <input type="number" class="text_pole" data-key="writeWords" min="0" max="1500" step="10">
-        <small>Anything you typed in the message box is used as the direction.</small>
+        <small>Automatic is based on the length of your own recent messages. Anything you typed in the message box is used as the direction.</small>
       </div>
       <div class="de-row">
         <label>Extra instructions</label>
@@ -875,7 +985,7 @@ const SETTINGS_HTML = `
         <div class="de-row">
           <label>Max tokens (0 = automatic)</label>
           <input type="number" class="text_pole" data-key="maxTokens" min="0" max="8000" step="50">
-          <small>Raise this for reasoning models if results come back empty.</small>
+          <small>Background and Lightweight modes only. Preset mode uses your preset's response length.</small>
         </div>
       </div>
       <div class="menu_button" id="de_reset">Reset to defaults</div>
@@ -923,7 +1033,7 @@ function buildSettingsPanel() {
         Object.assign(getSettings(), DEFAULTS);
         saveSettings();
         syncSettingsUI();
-        updateButton();
+        buildUI();
         toastr.success('Settings reset', 'Draft Enhancer', { timeOut: 1500 });
     });
 }
@@ -960,8 +1070,8 @@ async function registerSlashCommands() {
                 name: 'write-for-me',
                 aliases: ['writeforme'],
                 callback: async (_args, value) => (await runTask('write', String(value || '').trim() || undefined)) ?? '',
-                returns: "the generated message (also placed in the message box)",
-                unnamedArgumentList: arg("optional direction (defaults to the message box)"),
+                returns: 'the generated message (also placed in the message box)',
+                unnamedArgumentList: arg('optional direction (defaults to the message box)'),
                 helpString: "Writes the user's next message, optionally steered by a direction, and puts it in the message box.",
             }),
         );
@@ -981,7 +1091,17 @@ globalThis.DraftEnhancer = {
     undo: undoLast,
     getLastPrompt: () => state.lastPrompt,
     getLastOutput: () => state.lastOutput,
-    _internals: { getSettings, computeTarget, buildEnhanceTask, buildWriteTask, buildRawContext, cleanOutput, stripReasoning, detectFormat, state },
+    _internals: {
+        getSettings,
+        computeTarget,
+        buildEnhanceTask,
+        buildWriteTask,
+        buildRawContext,
+        cleanOutput,
+        stripReasoning,
+        detectFormat,
+        state,
+    },
 };
 
 jQuery(async () => {
