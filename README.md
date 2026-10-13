@@ -8,7 +8,7 @@ Turn a rough one-liner into a full, polished roleplay message, or let the model 
 The result lands in the message box, so you can edit it before sending, and **Undo** brings your original text back.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-1.0.0-informational)
+![Version](https://img.shields.io/badge/version-1.0.1-informational)
 ![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-orange)
 
 <!-- Add screenshots here, for example: ![Menu](docs/menu.png) ![Settings](docs/settings.png) -->
@@ -31,6 +31,7 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - [For developers](#for-developers)
 - [Updating and uninstalling](#updating-and-uninstalling)
 - [License](#license)
+- [العربية](#العربية)
 
 ---
 
@@ -41,10 +42,11 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - **Faithful to your intent.** Your actions, dialogue and decisions are kept in order. A creativity setting controls how much new detail may be added.
 - **Matches your style.** Perspective, tense and formatting (`*actions*` with `"dialogue"`, or plain prose) are detected from your draft and earlier messages, or forced from the settings.
 - **Never speaks for the character.** The instruction forbids writing the character's dialogue, actions or reactions.
-- **Any language.** Output in the language of your draft, the language of the chat, or a custom language.
+- **Any language.** Output in the language of your draft, the language of the chat, or a custom language. Arabic drafts are supported, including the token budget.
 - **Length control.** Light polish, balanced, rich, or match the length of the character's last message, with minimum and maximum word limits.
 - **Safe to use.** Optional preview window (Use / Retry / Cancel), one-step Undo, cancel while generating, and the original draft is never lost on errors.
-- **Fast access.** Send-bar button, keyboard shortcuts and slash commands.
+- **Fast access.** Send-bar button, entries in SillyTavern's Extensions (wand) menu, keyboard shortcuts and slash commands.
+- **Touch friendly.** On phones and narrow windows the menu opens as a centered sheet with large tap targets, and tapping it does not close the on-screen keyboard.
 - **Two modes.** Full context, or a lightweight mode that sends only a compact context.
 - **Robust.** Handles reasoning blocks (`<think>...</think>`), code fences and stray labels in model output, and falls back to the older SillyTavern call signatures when needed.
 
@@ -71,13 +73,12 @@ SillyTavern/public/scripts/extensions/third-party/DraftEnhancer   (for all users
 ### Option C: Termux (SillyTavern running on your phone)
 
 ```bash
-termux-setup-storage            # first time only, grant the storage permission
-pkg install unzip -y
-unzip ~/storage/downloads/DraftEnhancer.zip -d ~/storage/downloads/
-cp -r ~/storage/downloads/DraftEnhancer ~/SillyTavern/data/default-user/extensions/
+pkg install git -y              # skip if git is already installed
+cd ~/SillyTavern/data/default-user/extensions
+git clone https://github.com/brabro1/Draft-Enhancer
 ```
 
-Adjust the paths if your SillyTavern folder or user name is different, then restart SillyTavern.
+Adjust the path if your SillyTavern folder or user name is different, then restart SillyTavern and reload the page.
 
 ### Option D: phone connected to a SillyTavern server
 
@@ -104,7 +105,9 @@ The feather button sits on the left side of the send bar. Clicking it opens the 
 | Write something for me | Writes your next message, using the box text as direction if present | `Alt+W` |
 | Undo last change | Restores the text you had before the last enhance or write | `Alt+Z` |
 
-While a request is running the button shows a spinner. Click it to cancel.
+On phones and narrow windows the menu opens as a centered sheet. The same two actions are also listed in SillyTavern's **Extensions (wand) menu**, next to the message box, which you can turn off in the settings.
+
+While a request is running the button shows a spinner. Click or tap it to cancel.
 
 Shortcuts work only while the cursor is in the message box, use physical key positions (so they work on any keyboard layout, including Arabic), and can be turned off in the settings. Touch devices use the button.
 
@@ -149,6 +152,7 @@ Open **Extensions** and expand **Draft Enhancer**. All settings are saved with y
 | Preview before applying | Off | Show the Use / Retry / Cancel window |
 | Send automatically after generating | Off | Send the result immediately |
 | Keyboard shortcuts | On | `Alt+E`, `Alt+W`, `Alt+Z` inside the message box |
+| Also show the actions in the Extensions (wand) menu | On | Adds "Enhance my draft" and "Write something for me" to the wand menu |
 | Log prompts and outputs | Off | Writes the prompt and raw output to the browser console |
 
 ### Enhance my draft
@@ -220,6 +224,8 @@ Turn on **Log prompts and outputs**, or run `DraftEnhancer.getLastPrompt()` in t
 
 **"Wait for the current reply to finish first."** The extension does not start while a normal reply is generating.
 
+**The feather button does nothing on my phone.** Update to version 1.0.1 or newer (Extensions, Manage extensions, update, then reload the page). You can also use the **Enhance my draft** and **Write something for me** entries in the Extensions (wand) menu next to the message box, or the slash commands. If it still fails, open an issue and include your phone, browser, SillyTavern version and how you run SillyTavern (Termux or a remote server).
+
 **Empty or very short result with a reasoning model.** Reasoning tokens can use up the response limit. Raise **Max tokens** in the Advanced settings.
 
 **The model answers as the character instead of rewriting.** Switch to **Lightweight** mode, or add an extra instruction such as `Output only the rewritten message`.
@@ -239,7 +245,7 @@ Turn on **Log prompts and outputs**, or run `DraftEnhancer.getLastPrompt()` in t
 ## Compatibility and limitations
 
 - Built for current SillyTavern releases and uses the stable `SillyTavern.getContext()` API. It also contains a fallback for the older positional signatures of `generateQuietPrompt` and `generateRaw`. Very old versions are not tested.
-- Developed and tested on desktop. On phones the same button and menu are used. Keyboard shortcuts need a physical keyboard.
+- Developed and tested on desktop, and the touch layout is tested in an emulated phone browser. Real-device reports are welcome. Keyboard shortcuts need a physical keyboard, so on phones use the button, the wand menu or the slash commands.
 - It uses SillyTavern's own generation functions, so it follows whichever API and model you have connected. Behavior can still differ between models and providers.
 - Results are not streamed. The text appears when generation finishes.
 - Only one request runs at a time, and it is blocked while a normal reply is generating.
@@ -295,3 +301,23 @@ Issues and pull requests are welcome. When reporting a bug, include your SillyTa
 Released under the [MIT License](LICENSE).
 
 ---
+
+## العربية
+
+**Draft Enhancer** إضافة لـ SillyTavern تضيف زراً بجانب خانة الرسالة فيه أداتان:
+
+- **Enhance my draft**: تكتب مسودة قصيرة (حتى لو كلمتين) فتتحول إلى رسالة كاملة ومحسّنة تناسب المشهد وأسلوب شخصيتك وأسلوب المحادثة، مع الحفاظ على أحداثك وحوارك.
+- **Write something for me**: تكتب لك رسالتك القادمة، وما كتبته في الخانة يُستخدم كتوجيه.
+
+**التثبيت:** من **Extensions** ثم **Install extension** والصق رابط المستودع، أو انسخ مجلد `DraftEnhancer` يدوياً إلى `SillyTavern/data/default-user/extensions/` ثم أعد التشغيل وحدّث الصفحة.
+
+**الاستخدام:**
+- اكتب مسودتك ثم اضغط زر الريشة واختر **Enhance my draft**، أو اضغط `Alt+E`.
+- `Alt+W` لـ **Write something for me**، و`Alt+Z` للتراجع.
+- الأوامر: `/enhance-draft` و `/write-for-me`.
+- في الإعدادات تتحكم بالطول والإبداع والمنظور والتنسيق ولغة الناتج، وتقدر تفعّل نافذة المعاينة (استخدام / إعادة / إلغاء).
+
+**ملاحظات:**
+- الوضع الافتراضي **Full context** يستخدم الـ preset وبطاقة الشخصية والـ persona واللوربوك، فالنتيجة تتبع موديلك. إذا رد الموديل كالشخصية بدل التحسين، جرّب وضع **Lightweight**.
+- إذا طلعت النتيجة فارغة مع موديل تفكير (reasoning)، ارفع **Max tokens**.
+- الإضافة لا ترسل بياناتك إلا إلى الـ API المتصل بالفعل في SillyTavern.

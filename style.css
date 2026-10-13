@@ -13,6 +13,11 @@
     opacity: 0.7;
     transition: opacity 0.15s ease, transform 0.15s ease;
     flex-shrink: 0;
+    min-width: 2.2em;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #de_button:hover,
@@ -29,7 +34,7 @@
 /* ---------- Popup menu ---------- */
 .de-menu {
     position: fixed;
-    z-index: 30000;
+    z-index: 2147483000;
     min-width: 260px;
     max-width: calc(100vw - 16px);
     padding: 6px;
@@ -43,6 +48,8 @@
 }
 
 .de-item {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -87,11 +94,39 @@
     background: rgba(128, 128, 128, 0.3);
 }
 
+/* ---------- Touch layout: centered sheet + backdrop ---------- */
+.de-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2147482999;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.de-menu.de-sheet {
+    box-sizing: border-box;
+    left: 50% !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 380px);
+    min-width: 0;
+    padding: 8px;
+}
+
+.de-menu.de-sheet .de-item {
+    min-height: 52px;
+    font-size: 1.05em;
+}
+
+.de-menu.de-sheet .de-item kbd {
+    display: none;
+}
+
 /* ---------- Preview modal ---------- */
 .de-modal {
     position: fixed;
     inset: 0;
-    z-index: 31000;
+    z-index: 2147483000;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -22,6 +22,7 @@ const DEFAULTS = {
     preview: false,
     autoSend: false,
     shortcuts: true,
+    extMenu: true, // also list the actions in SillyTavern's Extensions (wand) menu
     debug: false,
 
     length: 'balanced', // 'polish' | 'balanced' | 'rich' | 'match'
@@ -497,17 +498,29 @@ function undoLast() {
 /* ------------------------------------------------------------------ */
 
 function updateButton() {
+    const enabled = !!getSettings().enabled;
     const $b = $('#de_button');
-    if (!$b.length) return;
-    $b.toggleClass('de-busy', state.generating);
-    $b.toggleClass('fa-feather-pointed', !state.generating);
-    $b.toggleClass('fa-spinner fa-spin', state.generating);
-    $b.attr('title', state.generating ? 'Working… click to cancel' : 'Draft Enhancer');
-    $b.toggleClass('displayNone', !getSettings().enabled);
+    if ($b.length) {
+        $b.toggleClass('de-busy', state.generating);
+        $b.toggleClass('fa-feather-pointed', !state.generating);
+        $b.toggleClass('fa-spinner fa-spin', state.generating);
+        $b.attr('title', state.generating ? 'Working… tap to cancel' : 'Draft Enhancer');
+        $b.toggleClass('displayNone', !enabled);
+    }
+    $('#de_ext_enhance, #de_ext_write').toggleClass('displayNone', !enabled);
+}
+
+/** Phones, tablets and narrow windows get a centered sheet instead of a popup anchored to the button. */
+function isTouchLayout() {
+    try {
+        return window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
+    } catch {
+        return window.innerWidth <= 800;
+    }
 }
 
 function closeMenu() {
-    $('#de_menu').hide();
+    $('#de_menu, #de_backdrop').hide();
 }
 
 function toggleMenu() {
@@ -515,16 +528,31 @@ function toggleMenu() {
     if ($menu.is(':visible')) return closeMenu();
 
     $menu.find('[data-action="undo"]').toggleClass('de-disabled', state.undoText === null);
-    $menu.css({ visibility: 'hidden', display: 'block' });
 
+    if (isTouchLayout()) {
+        // Centered sheet: does not depend on the button position, so the on-screen keyboard cannot push it off-screen.
+        $menu.addClass('de-sheet').css({ left: '', top: '', bottom: '', visibility: 'visible' });
+        $('#de_backdrop').show();
+        $menu.show();
+        return;
+    }
+
+    $menu.removeClass('de-sheet').css({ visibility: 'hidden', display: 'block' });
     const rect = document.getElementById('de_button').getBoundingClientRect();
     const width = $menu.outerWidth();
     const left = clamp(rect.left, 8, Math.max(8, window.innerWidth - width - 8));
     $menu.css({ left: `${left}px`, bottom: `${window.innerHeight - rect.top + 8}px`, top: 'auto', visibility: 'visible' });
 }
 
+function runAction(action) {
+    closeMenu();
+    if (action === 'enhance') runTask('enhance');
+    else if (action === 'write') runTask('write');
+    else if (action === 'undo') undoLast();
+}
+
 function buildUI() {
-    $('#de_button, #de_menu').remove();
+    $('#de_button, #de_menu, #de_backdrop, #de_ext_enhance, #de_ext_write').remove();
 
     const host = $('#leftSendForm').length ? $('#leftSendForm') : $('#send_form');
     host.append(
@@ -532,6 +560,7 @@ function buildUI() {
     );
 
     $('body').append(`
+        <div id="de_backdrop" class="de-backdrop" style="display:none"></div>
         <div id="de_menu" class="de-menu" style="display:none">
             <div class="de-item" data-action="enhance"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Enhance my draft</span><kbd>Alt+E</kbd></div>
             <div class="de-item" data-action="write"><i class="fa-solid fa-pen-nib"></i><span>Write something for me</span><kbd>Alt+W</kbd></div>
@@ -539,34 +568,85 @@ function buildUI() {
             <div class="de-item" data-action="undo"><i class="fa-solid fa-rotate-left"></i><span>Undo last change</span><kbd>Alt+Z</kbd></div>
         </div>
     `);
+
+    // Second entry point: SillyTavern's own Extensions (wand) menu, which is reliable on phones.
+    const $ext = $('#extensionsMenu');
+    if ($ext.length && getSettings().extMenu) {
+        const item = (id, icon, label) =>
+            `<div id="${id}" class="list-group-item flex-container flexGap5 interactable" tabindex="0" title="${label}">` +
+            `<div class="fa-solid ${icon} extensionsMenuExtensionButton"></div><span>${label}</span></div>`;
+        $ext.append(item('de_ext_enhance', 'fa-wand-magic-sparkles', 'Enhance my draft'));
+        $ext.append(item('de_ext_write', 'fa-pen-nib', 'Write something for me'));
+    }
     updateButton();
+}
+
+let lastTap = { key: '', at: 0 };
+let windowHandlers = null;
+
+/** True if the same control was activated moments ago (touch + synthesized click can both arrive). */
+function isDuplicateTap(key) {
+    const now = Date.now();
+    if (lastTap.key === key && now - lastTap.at < 300) return true;
+    lastTap = { key, at: now };
+    return false;
+}
+
+function onButtonActivate() {
+    if (isDuplicateTap('button')) return;
+    if (state.generating) cancelGeneration();
+    else toggleMenu();
 }
 
 function bindGlobalEvents() {
     $(document).off('.de');
+    if (windowHandlers) {
+        window.removeEventListener('click', windowHandlers.click, true);
+        window.removeEventListener('mousedown', windowHandlers.mousedown, true);
+    }
 
-    $(document).on('click.de', '#de_button', (e) => {
-        e.stopPropagation();
-        if (state.generating) return cancelGeneration();
-        toggleMenu();
-    });
+    // Capture-phase listeners on window: they run before any other handler, so nothing in the page can swallow the tap.
+    const click = (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+
+        if (t.closest('#de_button')) return onButtonActivate();
+
+        const item = t.closest('#de_menu .de-item');
+        if (item) {
+            if (item.classList.contains('de-disabled') || isDuplicateTap(`item:${item.dataset.action}`)) return;
+            return runAction(item.dataset.action);
+        }
+
+        const ext = t.closest('#de_ext_enhance, #de_ext_write');
+        if (ext) {
+            if (isDuplicateTap(`ext:${ext.id}`)) return;
+            try {
+                $('#extensionsMenu').hide();
+            } catch {
+                /* ignore */
+            }
+            return runTask(ext.id === 'de_ext_write' ? 'write' : 'enhance');
+        }
+
+        if (!t.closest('#de_menu')) closeMenu(); // tap outside / on the backdrop
+    };
+
+    // Keep focus (and the on-screen keyboard) in the message box when tapping our controls.
+    const mousedown = (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (t && t.closest('#de_button, #de_menu, #de_ext_enhance, #de_ext_write')) e.preventDefault();
+    };
+
+    window.addEventListener('click', click, true);
+    window.addEventListener('mousedown', mousedown, true);
+    windowHandlers = { click, mousedown };
 
     $(document).on('keydown.de', '#de_button', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            $('#de_button').trigger('click');
+            onButtonActivate();
         }
-    });
-
-    $(document).on('click.de', '#de_menu .de-item', function () {
-        const action = this.dataset.action;
-        if (action === 'enhance') runTask('enhance');
-        else if (action === 'write') runTask('write');
-        else if (action === 'undo') undoLast();
-    });
-
-    $(document).on('click.de', (e) => {
-        if (!$(e.target).closest('#de_menu, #de_button').length) closeMenu();
     });
 
     $(document).on('keydown.de', (e) => {
@@ -667,6 +747,7 @@ const SETTINGS_HTML = `
       <label class="checkbox_label"><input type="checkbox" data-key="preview"><span>Preview before applying (Use / Retry / Cancel)</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="autoSend"><span>Send automatically after generating</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="shortcuts"><span>Keyboard shortcuts in the message box (Alt+E enhance, Alt+W write, Alt+Z undo)</span></label>
+      <label class="checkbox_label"><input type="checkbox" data-key="extMenu"><span>Also show the actions in the Extensions (wand) menu</span></label>
       <label class="checkbox_label"><input type="checkbox" data-key="debug"><span>Log prompts and outputs to the browser console</span></label>
 
       <h4>Enhance my draft</h4>
@@ -792,6 +873,7 @@ function buildSettingsPanel() {
         s[key] = v;
         saveSettings();
         if (key === 'enabled') updateButton();
+        if (key === 'extMenu') buildUI();
     });
 
     $('#de_reset').on('click', () => {
