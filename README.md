@@ -296,5 +296,3 @@ Issues and pull requests are welcome. When reporting a bug, include your SillyTa
 Released under the [MIT License](LICENSE).
 
 ---
-- إذا طلعت النتيجة فارغة مع موديل تفكير (reasoning)، ارفع **Max tokens**.
-- الإضافة لا ترسل بياناتك إلا إلى الـ API المتصل بالفعل في SillyTavern.
