@@ -31,20 +31,29 @@
     cursor: progress;
 }
 
-/* ---------- Popup menu ---------- */
+/* ---------- Menu (native <dialog>) ---------- */
+/* Desktop: non-modal popup positioned by script above the button. */
 .de-menu {
     position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
     z-index: 2147483000;
+    box-sizing: border-box;
     min-width: 260px;
     max-width: calc(100vw - 16px);
-    padding: 6px;
     border-radius: 12px;
     border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
     background: var(--SmartThemeBlurTintColor, #1e1e1e);
     backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
-    color: var(--SmartThemeBodyColor, inherit);
+    color: var(--SmartThemeBodyColor, #ddd);
+    font: inherit;
+}
+
+.de-menu-inner {
+    padding: 6px;
 }
 
 .de-item {
@@ -94,23 +103,24 @@
     background: rgba(128, 128, 128, 0.3);
 }
 
-/* ---------- Touch layout: centered sheet + backdrop ---------- */
-.de-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 2147482999;
-    background: rgba(0, 0, 0, 0.45);
-}
-
+/* ---------- Touch layout: modal sheet centered on the screen ---------- */
 .de-menu.de-sheet {
-    box-sizing: border-box;
-    left: 50% !important;
-    top: 50% !important;
-    bottom: auto !important;
-    transform: translate(-50%, -50%);
+    inset: 0;
+    margin: auto;
     width: min(92vw, 380px);
     min-width: 0;
+    height: fit-content;
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow: auto;
+}
+
+.de-menu.de-sheet .de-menu-inner {
     padding: 8px;
+}
+
+.de-menu.de-sheet::backdrop {
+    background: rgba(0, 0, 0, 0.5);
 }
 
 .de-menu.de-sheet .de-item {
@@ -122,15 +132,25 @@
     display: none;
 }
 
-/* ---------- Preview modal ---------- */
+/* ---------- Preview window (modal <dialog>) ---------- */
 .de-modal {
-    position: fixed;
     inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px;
+    margin: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-sizing: border-box;
+    width: min(720px, calc(100vw - 24px));
+    max-width: none;
+    height: fit-content;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow: visible;
+    color: var(--SmartThemeBodyColor, #ddd);
+    font: inherit;
+}
+
+.de-modal::backdrop {
     background: rgba(0, 0, 0, 0.55);
 }
 
@@ -138,8 +158,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: min(720px, 100%);
-    max-height: 92vh;
+    box-sizing: border-box;
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
     padding: 16px;
     border-radius: 14px;
     border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
@@ -223,4 +245,12 @@
 #de_settings textarea.text_pole {
     min-height: 70px;
     resize: vertical;
+}
+
+/* No focus ring on the dialog surfaces themselves (they receive focus when opened). */
+.de-menu:focus,
+.de-menu:focus-visible,
+.de-modal:focus,
+.de-modal:focus-visible {
+    outline: none;
 }

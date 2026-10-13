@@ -66,7 +66,6 @@ class CancelledError extends Error {
 const ctx = () => SillyTavern.getContext();
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const wordCount = (t) => (String(t || '').trim().match(/\S+/g) || []).length;
-const hasArabic = (t) => /[؀-ۿ]/.test(String(t || ''));
 const cut = (t, n) => (t.length > n ? t.slice(0, n) + '…' : t);
 
 function getSettings() {
@@ -335,11 +334,10 @@ function cleanOutput(raw) {
 async function generate(task) {
     const c = ctx();
     const s = getSettings();
-    const arabic = hasArabic(task.draft) || hasArabic(chatMessages().slice(-2).map((m) => m.mes).join(' '));
     const maxTokens =
         Number(s.maxTokens) > 0
             ? Number(s.maxTokens)
-            : clamp(Math.round(task.t.hi * (arabic ? 4.5 : 3)) + 150, 300, 3000);
+            : clamp(Math.round(task.t.hi * 4) + 150, 300, 3000);
 
     state.cancelled = false;
     state.generating = true;
@@ -519,29 +517,63 @@ function isTouchLayout() {
     }
 }
 
+/*
+ * The menu and the preview window are native <dialog> elements. Opened with showModal() they live in the
+ * browser's top layer, which is positioned against the screen itself. This keeps them on-screen even when a
+ * theme or another extension transforms or resizes the page (which breaks normal position:fixed elements).
+ */
+function openDialog(el, modal) {
+    try {
+        if (modal && typeof el.showModal === 'function') return el.showModal();
+        if (typeof el.show === 'function') return el.show();
+    } catch (err) {
+        console.warn(TAG, 'dialog open failed, using fallback', err);
+    }
+    el.setAttribute('open', '');
+}
+
+function closeDialog(el) {
+    if (!el || !el.hasAttribute('open')) return;
+    try {
+        if (typeof el.close === 'function') return el.close();
+    } catch {
+        /* ignore */
+    }
+    el.removeAttribute('open');
+}
+
+const menuEl = () => document.getElementById('de_menu');
+const isMenuOpen = () => !!menuEl()?.hasAttribute('open');
+
 function closeMenu() {
-    $('#de_menu, #de_backdrop').hide();
+    closeDialog(menuEl());
 }
 
 function toggleMenu() {
-    const $menu = $('#de_menu');
-    if ($menu.is(':visible')) return closeMenu();
+    const m = menuEl();
+    if (!m) return;
+    if (isMenuOpen()) return closeMenu();
 
-    $menu.find('[data-action="undo"]').toggleClass('de-disabled', state.undoText === null);
+    $(m).find('[data-action="undo"]').toggleClass('de-disabled', state.undoText === null);
 
     if (isTouchLayout()) {
-        // Centered sheet: does not depend on the button position, so the on-screen keyboard cannot push it off-screen.
-        $menu.addClass('de-sheet').css({ left: '', top: '', bottom: '', visibility: 'visible' });
-        $('#de_backdrop').show();
-        $menu.show();
+        // Centered sheet in the top layer, with a dimmed backdrop. Tap the backdrop to close.
+        m.classList.add('de-sheet');
+        m.removeAttribute('style');
+        openDialog(m, true);
         return;
     }
 
-    $menu.removeClass('de-sheet').css({ visibility: 'hidden', display: 'block' });
+    // Desktop: small popup anchored above the button.
+    m.classList.remove('de-sheet');
+    m.style.cssText = 'visibility:hidden;left:0;top:0;bottom:auto';
+    openDialog(m, false);
     const rect = document.getElementById('de_button').getBoundingClientRect();
-    const width = $menu.outerWidth();
+    const width = m.offsetWidth;
+    const height = m.offsetHeight;
     const left = clamp(rect.left, 8, Math.max(8, window.innerWidth - width - 8));
-    $menu.css({ left: `${left}px`, bottom: `${window.innerHeight - rect.top + 8}px`, top: 'auto', visibility: 'visible' });
+    const top = clamp(rect.top - height - 8, 8, Math.max(8, window.innerHeight - height - 8));
+    m.style.cssText = `left:${left}px;top:${top}px;bottom:auto;visibility:visible`;
 }
 
 function runAction(action) {
@@ -552,7 +584,8 @@ function runAction(action) {
 }
 
 function buildUI() {
-    $('#de_button, #de_menu, #de_backdrop, #de_ext_enhance, #de_ext_write').remove();
+    closeMenu();
+    $('#de_button, #de_menu, #de_ext_enhance, #de_ext_write').remove();
 
     const host = $('#leftSendForm').length ? $('#leftSendForm') : $('#send_form');
     host.append(
@@ -560,13 +593,14 @@ function buildUI() {
     );
 
     $('body').append(`
-        <div id="de_backdrop" class="de-backdrop" style="display:none"></div>
-        <div id="de_menu" class="de-menu" style="display:none">
-            <div class="de-item" data-action="enhance"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Enhance my draft</span><kbd>Alt+E</kbd></div>
-            <div class="de-item" data-action="write"><i class="fa-solid fa-pen-nib"></i><span>Write something for me</span><kbd>Alt+W</kbd></div>
-            <div class="de-sep"></div>
-            <div class="de-item" data-action="undo"><i class="fa-solid fa-rotate-left"></i><span>Undo last change</span><kbd>Alt+Z</kbd></div>
-        </div>
+        <dialog id="de_menu" class="de-menu" aria-label="Draft Enhancer">
+            <div class="de-menu-inner">
+                <div class="de-item" data-action="enhance"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Enhance my draft</span><kbd>Alt+E</kbd></div>
+                <div class="de-item" data-action="write"><i class="fa-solid fa-pen-nib"></i><span>Write something for me</span><kbd>Alt+W</kbd></div>
+                <div class="de-sep"></div>
+                <div class="de-item" data-action="undo"><i class="fa-solid fa-rotate-left"></i><span>Undo last change</span><kbd>Alt+Z</kbd></div>
+            </div>
+        </dialog>
     `);
 
     // Second entry point: SillyTavern's own Extensions (wand) menu, which is reliable on phones.
@@ -629,7 +663,8 @@ function bindGlobalEvents() {
             return runTask(ext.id === 'de_ext_write' ? 'write' : 'enhance');
         }
 
-        if (!t.closest('#de_menu')) closeMenu(); // tap outside / on the backdrop
+        // Tap outside the popup, or on the sheet's backdrop (which targets the <dialog> element itself).
+        if (t.id === 'de_menu' || !t.closest('#de_menu')) closeMenu();
     };
 
     // Keep focus (and the on-screen keyboard) in the message box when tapping our controls.
@@ -653,7 +688,7 @@ function bindGlobalEvents() {
         if (e.key === 'Escape') closeMenu();
     });
 
-    // Keyboard shortcuts (layout independent, works with Arabic keyboards). Only inside the message box.
+    // Keyboard shortcuts (based on physical key positions, so they work with any keyboard layout). Only inside the message box.
     $(document).on('keydown.de', '#send_textarea', (e) => {
         if (!getSettings().shortcuts || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
         const map = { KeyE: () => runTask('enhance'), KeyW: () => runTask('write'), KeyZ: undoLast };
@@ -675,7 +710,7 @@ function showPreview(original, result, kind) {
         state.modalOpen = true;
 
         const $m = $(`
-            <div class="de-modal" id="de_modal">
+            <dialog class="de-modal" id="de_modal" aria-label="Draft Enhancer preview">
                 <div class="de-modal-box">
                     <div class="de-modal-title"></div>
                     <details class="de-original">
@@ -689,7 +724,7 @@ function showPreview(original, result, kind) {
                         <div class="menu_button" data-act="use"><i class="fa-solid fa-check"></i> Use this</div>
                     </div>
                 </div>
-            </div>
+            </dialog>
         `);
 
         $m.find('.de-modal-title').text(kind === 'write' ? 'Write something for me' : 'Enhance my draft');
@@ -697,10 +732,13 @@ function showPreview(original, result, kind) {
         $m.find('.de-original-text').text(original || '(none)');
         $m.find('#de_preview_text').val(result);
 
+        let finished = false;
         const done = (action) => {
+            if (finished) return;
+            finished = true;
             const text = String($m.find('#de_preview_text').val() ?? '');
+            closeDialog($m[0]);
             $m.remove();
-            $(document).off('keydown.de_modal');
             state.modalOpen = false;
             resolve({ action, text });
         };
@@ -708,14 +746,19 @@ function showPreview(original, result, kind) {
         $m.on('click', '[data-act]', function () {
             done(this.dataset.act);
         });
+        // A press on the backdrop targets the <dialog> itself (the box covers the rest). mousedown, not click,
+        // so selecting text in the box and releasing outside does not close it.
         $m.on('mousedown', (e) => {
             if (e.target === $m[0]) done('cancel');
         });
-        $(document).on('keydown.de_modal', (e) => {
-            if (e.key === 'Escape') done('cancel');
+        // Escape key / Android back gesture
+        $m.on('cancel', (e) => {
+            e.preventDefault();
+            done('cancel');
         });
 
         $('body').append($m);
+        openDialog($m[0], true);
         $m.find('#de_preview_text').trigger('focus');
     });
 }

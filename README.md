@@ -8,7 +8,7 @@ Turn a rough one-liner into a full, polished roleplay message, or let the model 
 The result lands in the message box, so you can edit it before sending, and **Undo** brings your original text back.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-1.0.1-informational)
+![Version](https://img.shields.io/badge/version-1.0.2-informational)
 ![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-orange)
 
 <!-- Add screenshots here, for example: ![Menu](docs/menu.png) ![Settings](docs/settings.png) -->
@@ -31,7 +31,6 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - [For developers](#for-developers)
 - [Updating and uninstalling](#updating-and-uninstalling)
 - [License](#license)
-- [العربية](#العربية)
 
 ---
 
@@ -42,7 +41,7 @@ The result lands in the message box, so you can edit it before sending, and **Un
 - **Faithful to your intent.** Your actions, dialogue and decisions are kept in order. A creativity setting controls how much new detail may be added.
 - **Matches your style.** Perspective, tense and formatting (`*actions*` with `"dialogue"`, or plain prose) are detected from your draft and earlier messages, or forced from the settings.
 - **Never speaks for the character.** The instruction forbids writing the character's dialogue, actions or reactions.
-- **Any language.** Output in the language of your draft, the language of the chat, or a custom language. Arabic drafts are supported, including the token budget.
+- **Any language.** Output in the language of your draft, the language of the chat, or a custom language.
 - **Length control.** Light polish, balanced, rich, or match the length of the character's last message, with minimum and maximum word limits.
 - **Safe to use.** Optional preview window (Use / Retry / Cancel), one-step Undo, cancel while generating, and the original draft is never lost on errors.
 - **Fast access.** Send-bar button, entries in SillyTavern's Extensions (wand) menu, keyboard shortcuts and slash commands.
@@ -109,7 +108,7 @@ On phones and narrow windows the menu opens as a centered sheet. The same two ac
 
 While a request is running the button shows a spinner. Click or tap it to cancel.
 
-Shortcuts work only while the cursor is in the message box, use physical key positions (so they work on any keyboard layout, including Arabic), and can be turned off in the settings. Touch devices use the button.
+Shortcuts work only while the cursor is in the message box, use physical key positions (so they work on any keyboard layout), and can be turned off in the settings. Touch devices use the button.
 
 ### Slash commands
 
@@ -181,7 +180,7 @@ Open **Extensions** and expand **Draft Enhancer**. All settings are saved with y
 | Setting | Default | Description |
 | --- | --- | --- |
 | Messages of history (Lightweight mode) | 6 | How many recent messages are included in Lightweight mode |
-| Max tokens | 0 | Response token limit. 0 chooses automatically from the target length (roughly 3 tokens per word, 4.5 for Arabic, plus headroom, between 300 and 3000) |
+| Max tokens | 0 | Response token limit. 0 chooses automatically from the target length (roughly 4 tokens per word plus headroom, between 300 and 3000) |
 
 **Reset to defaults** restores every setting.
 
@@ -213,7 +212,7 @@ Turn on **Log prompts and outputs**, or run `DraftEnhancer.getLastPrompt()` in t
 - Use **Match the last character message** to keep both sides at a similar length.
 - If your chat uses a special style (second person, present tense, no asterisks), set Perspective and Formatting explicitly instead of Auto.
 - Use **Extra instructions** for personal rules, for example `Keep my character guarded and sarcastic` or `Short sentences, no purple prose`.
-- Draft in Arabic and want English output (or the reverse)? Set **Output language** to **Same as the chat**.
+- Want the result in a different language than your draft? Set **Output language** to **Same as the chat** or **Custom**.
 - Use the preview window with **Retry** when you want to compare several versions.
 
 ## Troubleshooting and FAQ
@@ -224,7 +223,7 @@ Turn on **Log prompts and outputs**, or run `DraftEnhancer.getLastPrompt()` in t
 
 **"Wait for the current reply to finish first."** The extension does not start while a normal reply is generating.
 
-**The feather button does nothing on my phone.** Update to version 1.0.1 or newer (Extensions, Manage extensions, update, then reload the page). You can also use the **Enhance my draft** and **Write something for me** entries in the Extensions (wand) menu next to the message box, or the slash commands. If it still fails, open an issue and include your phone, browser, SillyTavern version and how you run SillyTavern (Termux or a remote server).
+**The feather button does nothing on my phone.** Update to version 1.0.2 or newer (Extensions, Manage extensions, update, then reload the page). You can also use the **Enhance my draft** and **Write something for me** entries in the Extensions (wand) menu next to the message box, or the slash commands. If it still fails, open an issue and include your phone, browser, SillyTavern version and how you run SillyTavern (Termux or a remote server).
 
 **Empty or very short result with a reasoning model.** Reasoning tokens can use up the response limit. Raise **Max tokens** in the Advanced settings.
 
@@ -294,30 +293,8 @@ Issues and pull requests are welcome. When reporting a bug, include your SillyTa
 ## Updating and uninstalling
 
 - **Update:** if you installed from GitHub, open **Extensions**, then **Manage extensions**, and use the update button. For a manual install, replace the folder and reload the page.
-- **Uninstall:** remove it from **Manage extensions**, or delete the `DraftEnhancer` folder and restart SillyTavern.
+- **Uninstall:** remove it from **Manage extensions**, or delete the extension folder and restart SillyTavern.
 
 ## License
 
 Released under the [MIT License](LICENSE).
-
----
-
-## العربية
-
-**Draft Enhancer** إضافة لـ SillyTavern تضيف زراً بجانب خانة الرسالة فيه أداتان:
-
-- **Enhance my draft**: تكتب مسودة قصيرة (حتى لو كلمتين) فتتحول إلى رسالة كاملة ومحسّنة تناسب المشهد وأسلوب شخصيتك وأسلوب المحادثة، مع الحفاظ على أحداثك وحوارك.
-- **Write something for me**: تكتب لك رسالتك القادمة، وما كتبته في الخانة يُستخدم كتوجيه.
-
-**التثبيت:** من **Extensions** ثم **Install extension** والصق رابط المستودع، أو انسخ مجلد `DraftEnhancer` يدوياً إلى `SillyTavern/data/default-user/extensions/` ثم أعد التشغيل وحدّث الصفحة.
-
-**الاستخدام:**
-- اكتب مسودتك ثم اضغط زر الريشة واختر **Enhance my draft**، أو اضغط `Alt+E`.
-- `Alt+W` لـ **Write something for me**، و`Alt+Z` للتراجع.
-- الأوامر: `/enhance-draft` و `/write-for-me`.
-- في الإعدادات تتحكم بالطول والإبداع والمنظور والتنسيق ولغة الناتج، وتقدر تفعّل نافذة المعاينة (استخدام / إعادة / إلغاء).
-
-**ملاحظات:**
-- الوضع الافتراضي **Full context** يستخدم الـ preset وبطاقة الشخصية والـ persona واللوربوك، فالنتيجة تتبع موديلك. إذا رد الموديل كالشخصية بدل التحسين، جرّب وضع **Lightweight**.
-- إذا طلعت النتيجة فارغة مع موديل تفكير (reasoning)، ارفع **Max tokens**.
-- الإضافة لا ترسل بياناتك إلا إلى الـ API المتصل بالفعل في SillyTavern.
