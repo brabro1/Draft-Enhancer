@@ -1,0 +1,191 @@
+/* Draft Enhancer — SillyTavern extension */
+
+/* ---------- Send-form button ---------- */
+#de_button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--bottomFormBlockSize, 2.2em);
+    height: var(--bottomFormBlockSize, 2.2em);
+    font-size: var(--bottomFormIconSize, 1.2em);
+    color: var(--SmartThemeBodyColor, inherit);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+#de_button:hover,
+#de_button:focus-visible {
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+#de_button.de-busy {
+    opacity: 1;
+    cursor: progress;
+}
+
+/* ---------- Popup menu ---------- */
+.de-menu {
+    position: fixed;
+    z-index: 30000;
+    min-width: 260px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    color: var(--SmartThemeBodyColor, inherit);
+}
+
+.de-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease;
+}
+
+.de-item:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.de-item i {
+    width: 1.2em;
+    text-align: center;
+    opacity: 0.85;
+}
+
+.de-item span {
+    flex: 1;
+}
+
+.de-item kbd {
+    font-size: 0.72em;
+    opacity: 0.6;
+    padding: 1px 6px;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    border-radius: 5px;
+    font-family: inherit;
+}
+
+.de-item.de-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.de-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: rgba(128, 128, 128, 0.3);
+}
+
+/* ---------- Preview modal ---------- */
+.de-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 31000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.de-modal-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(720px, 100%);
+    max-height: 92vh;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    color: var(--SmartThemeBodyColor, inherit);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    overflow: auto;
+}
+
+.de-modal-title {
+    font-weight: 600;
+    font-size: 1.1em;
+}
+
+.de-original {
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+.de-original summary {
+    cursor: pointer;
+}
+
+.de-original-text {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-radius: 8px;
+    background: rgba(128, 128, 128, 0.15);
+    font-family: inherit;
+}
+
+#de_preview_text {
+    width: 100%;
+    min-height: 220px;
+    max-height: 55vh;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.de-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.de-modal-actions .menu_button {
+    width: auto;
+    margin: 0;
+}
+
+/* ---------- Settings panel ---------- */
+#de_settings h4 {
+    margin: 14px 0 6px;
+    opacity: 0.9;
+}
+
+#de_settings .de-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 8px 0;
+}
+
+#de_settings .de-row small {
+    opacity: 0.65;
+}
+
+#de_settings .de-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+#de_settings textarea.text_pole {
+    min-height: 70px;
+    resize: vertical;
+}
