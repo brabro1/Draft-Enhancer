@@ -191,31 +191,61 @@
 }
 
 /* ---------- Settings panel ---------- */
-#de_settings h4 {
-    margin: 14px 0 6px;
+#de_settings .de-section {
+    grid-column: 1 / -1;
+    margin: 14px 0 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.35));
     opacity: 0.9;
+}
+
+/* Two-column grid: fields marked de-col sit side by side, everything else spans the width. */
+#de_settings .de-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px 10px;
+    align-items: start;
+}
+
+#de_settings .de-fields:empty {
+    display: none;
 }
 
 #de_settings .de-row {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    margin: 8px 0;
 }
 
-#de_settings .de-row small {
+#de_settings .de-fields > .de-row:not(.de-col),
+#de_settings .de-fields > .de-check {
+    grid-column: 1 / -1;
+}
+
+#de_settings .de-check {
+    margin: 0;
+}
+
+#de_settings small {
     opacity: 0.65;
-}
-
-#de_settings .de-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 8px;
+    line-height: 1.35;
 }
 
 #de_settings textarea.text_pole {
-    min-height: 70px;
+    min-height: 68px;
     resize: vertical;
+}
+
+#de_settings .de-fill {
+    width: fit-content;
+    margin-top: 4px;
+    padding: 2px 10px;
+    font-size: 0.85em;
+}
+
+#de_settings #de_reset {
+    width: fit-content;
+    margin-top: 12px;
 }
 
 /* No focus ring on the dialog surfaces themselves (they receive focus when opened). */

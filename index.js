@@ -3,39 +3,107 @@
  *
  * Janitor AI's "Enhance my draft" and "Write something for me", for SillyTavern.
  *
- * How it works: the request goes through SillyTavern's own generation, so your active preset
- * (main prompt, jailbreak, toggles, impersonation settings), lorebooks, persona and chat history apply.
- *   • Writing as you:            SillyTavern's Impersonate (the same path as the Impersonate button).
- *   • Writing as the character:  a quiet character turn (the path SillyTavern uses for background replies).
- * A short task note (your draft or direction, the length) is added as the last message.
- * The result lands in the message box, where you can edit it before sending.
+ * Everything is written into YOUR message box, as your own message. The request runs through
+ * SillyTavern's Impersonate pipeline, so your active preset (main prompt, jailbreak, toggles,
+ * impersonation prompt and prefill, impersonate-only prompts, user-input regex), lorebooks,
+ * persona and chat history all apply. The extension only adds a short note describing the task.
+ *
+ * "Write as" chooses who your message is about: yourself, the character (you take over their
+ * lines for this turn) or the narrator (scene and side characters). It never posts a reply as
+ * the character; the text always lands in your box for you to edit and send.
  */
 
 const MODULE = 'draftEnhancer';
 const TAG = '[Draft Enhancer]';
-const SETTINGS_VERSION = 3;
 const NOTE_KEY = 'draft_enhancer_note';
+const SETTINGS_VERSION = 4;
 
-const DEFAULTS = {
-    settingsVersion: SETTINGS_VERSION,
-    enabled: true,
-    length: 'flexible', // 'flexible' | 'short' | 'medium' | 'long'
-    speaker: 'user', // 'user' | 'char'
-    extra: '',
-    preview: false,
-    autoSend: false,
-    clean: true,
-    debug: false,
-};
+/* ------------------------------------------------------------------ */
+/* Settings schema (the panel and the defaults are both built from it) */
+/* ------------------------------------------------------------------ */
 
-/** Word ranges for the fixed lengths. Flexible is computed from your text (see lengthRange). */
+const SUBJECTS = [
+    ['user', 'You (your persona)'],
+    ['char', 'The character (you take over their lines)'],
+    ['narrator', 'Narrator (scene and side characters)'],
+];
+
+const FIELDS = [
+    { section: 'General' },
+    { key: 'enabled', type: 'bool', def: true, label: 'Enabled' },
+    { key: 'wandMenu', type: 'bool', def: true, label: 'Also show the actions in the Extensions (wand) menu' },
+    { key: 'shortcuts', type: 'bool', def: true, label: 'Keyboard shortcuts in the message box (Alt+E, Alt+W, Alt+Z)' },
+    { key: 'preview', type: 'bool', def: false, label: 'Preview before applying (Use / Retry / Cancel)' },
+    { key: 'autoSend', type: 'bool', def: false, label: 'Send automatically' },
+    { key: 'debug', type: 'bool', def: false, label: 'Log every request to the browser console' },
+
+    { section: 'Writing' },
+    {
+        key: 'subject', type: 'select', def: 'user', label: 'Write as', options: SUBJECTS, grid: true,
+        hint: 'Who your message is about. The result always goes into your own message box.',
+    },
+    {
+        key: 'length', type: 'select', def: 'flexible', label: 'Length', grid: true,
+        options: [
+            ['flexible', 'Flexible (fits your text)'],
+            ['short', 'Short (30-80 words)'],
+            ['medium', 'Medium (80-180 words)'],
+            ['long', 'Long (180-350 words)'],
+            ['custom', 'Custom range'],
+        ],
+    },
+    { key: 'lengthMin', type: 'number', def: 60, label: 'Custom: minimum words', min: 10, max: 2000, step: 10, grid: true, showIf: (s) => s.length === 'custom' },
+    { key: 'lengthMax', type: 'number', def: 160, label: 'Custom: maximum words', min: 10, max: 3000, step: 10, grid: true, showIf: (s) => s.length === 'custom' },
+    {
+        key: 'pov', type: 'select', def: 'auto', label: 'Point of view', grid: true,
+        options: [['auto', 'Auto (follow the chat)'], ['first', 'First person (I)'], ['second', 'Second person (you)'], ['third', 'Third person (he / she / they)']],
+    },
+    {
+        key: 'format', type: 'select', def: 'auto', label: 'Formatting', grid: true,
+        options: [['auto', 'Auto (follow the chat)'], ['asterisks', '*Actions* and "dialogue"'], ['plain', 'Plain prose and "dialogue"'], ['dialogue', 'Dialogue only']],
+    },
+    {
+        key: 'language', type: 'select', def: 'auto', label: 'Language', grid: true,
+        options: [['auto', 'Same as what I typed'], ['chat', 'Same as the chat'], ['custom', 'Custom']],
+    },
+    { key: 'languageName', type: 'text', def: '', label: 'Language name', placeholder: 'e.g. English', grid: true, showIf: (s) => s.language === 'custom' },
+    {
+        key: 'faithfulness', type: 'select', def: 'balanced', label: 'Enhance: faithfulness', grid: true,
+        options: [['strict', 'Strict (only wording and detail)'], ['balanced', 'Balanced (small supporting beats)'], ['creative', 'Creative (develop the idea)']],
+    },
+    { key: 'noRepeat', type: 'bool', def: true, label: 'Ask the model not to repeat recent messages' },
+    { key: 'endOpen', type: 'bool', def: true, label: 'Stop where the other side would answer (leave the turn open)' },
+
+    { section: 'Instructions' },
+    { key: 'notesEnhance', type: 'area', def: '', label: 'Your notes for Enhance my draft', placeholder: 'e.g. Keep sentences short, no purple prose.' },
+    { key: 'notesWrite', type: 'area', def: '', label: 'Your notes for Write something for me', placeholder: 'e.g. Keep my character guarded and sarcastic.' },
+    {
+        key: 'templateEnhance', type: 'area', def: '', label: 'Custom instruction for Enhance (advanced)', fill: 'enhance',
+        placeholder: 'Empty = the built-in instruction. Macros: {{draft}} {{rules}} {{notes}} {{subject}} {{other}} {{min}} {{max}}, plus SillyTavern macros such as {{user}} and {{char}}.',
+    },
+    {
+        key: 'templateWrite', type: 'area', def: '', label: 'Custom instruction for Write (advanced)', fill: 'write',
+        placeholder: 'Empty = the built-in instruction. Macros: {{direction}} {{rules}} {{notes}} {{subject}} {{other}} {{min}} {{max}}, plus SillyTavern macros.',
+    },
+
+    { section: 'Clean-up of the result' },
+    { key: 'cleanReasoning', type: 'bool', def: true, label: 'Remove reasoning blocks (<think>, <checklist>, …)' },
+    { key: 'cleanHeaders', type: 'bool', def: true, label: 'Remove scene headers ( [ time | day | place ] )' },
+    { key: 'cleanPanels', type: 'bool', def: true, label: 'Remove status, tracker and internal-state panels' },
+    { key: 'cleanHtml', type: 'bool', def: true, label: 'Remove any remaining HTML tags' },
+    { key: 'cleanCustom', type: 'area', def: '', label: 'Also remove (one regular expression per line)', placeholder: '/^\\[OOC:[^\\]]*\\]\\s*/gm' },
+];
+
+const DEFAULTS = { settingsVersion: SETTINGS_VERSION };
+for (const f of FIELDS) if (f.key) DEFAULTS[f.key] = f.def;
+
 const LENGTHS = { short: [30, 80], medium: [80, 180], long: [180, 350] };
 
 const state = {
-    busy: false, // a task is running (including while the preview is open)
-    generating: false, // a request is in flight
+    busy: false,
+    generating: false,
     cancelled: false,
-    undo: null, // message box text before the last change
+    undo: null,
     lastPrompt: '',
     lastOutput: '',
 };
@@ -56,18 +124,26 @@ function settings() {
     return s;
 }
 
-/** 1.x had many more options. Keep what still means something, drop the rest. */
+/** Carries over what still exists; anything else falls back to the default. */
 function migrate(s) {
     const old = { ...s };
     for (const k of Object.keys(s)) delete s[k];
     Object.assign(s, DEFAULTS);
-    s.enabled = old.enabled ?? true;
-    s.length = { polish: 'short', rich: 'long' }[old.length] || 'flexible';
-    s.extra = [old.enhanceExtra, old.writeExtra].map((x) => String(x || '').trim()).filter(Boolean).join('\n');
-    s.preview = !!old.preview;
-    s.autoSend = !!old.autoSend;
-    s.clean = old.cleanOutput ?? true;
-    s.debug = !!old.debug;
+    const keep = (k, v) => { if (v !== undefined) s[k] = v; };
+    keep('enabled', old.enabled);
+    keep('preview', old.preview);
+    keep('autoSend', old.autoSend);
+    keep('debug', old.debug);
+    keep('subject', old.speaker === 'char' ? 'char' : old.speaker === 'user' ? 'user' : undefined);
+    s.length = { polish: 'short', rich: 'long', flexible: 'flexible', short: 'short', medium: 'medium', long: 'long', custom: 'custom' }[old.length] || 'flexible';
+    keep('pov', old.pov);
+    keep('format', old.format === 'auto' || old.format === 'asterisks' || old.format === 'plain' ? old.format : undefined);
+    keep('faithfulness', { faithful: 'strict', balanced: 'balanced', creative: 'creative' }[old.creativity]);
+    const notes = [old.extra, old.enhanceExtra, old.writeExtra].map((x) => String(x || '').trim()).filter(Boolean);
+    if (notes.length) { s.notesEnhance = notes.join('\n'); s.notesWrite = notes.join('\n'); }
+    if (old.clean === false || old.cleanOutput === false) {
+        s.cleanHeaders = s.cleanPanels = s.cleanHtml = false;
+    }
 }
 
 const save = () => ctx().saveSettingsDebounced();
@@ -78,10 +154,19 @@ const save = () => ctx().saveSettingsDebounced();
 
 const words = (t) => (String(t || '').match(/\S+/g) || []).length;
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+const num = (v, def) => (Number.isFinite(Number(v)) ? Number(v) : def);
 
 function names() {
     const c = ctx();
     return { user: c.name1 || 'User', char: c.name2 || 'the character' };
+}
+
+/** Who the message is about, and who must be left alone. */
+function roles(s) {
+    const { user, char } = names();
+    if (s.subject === 'char') return { mode: 'char', who: char, other: user, piece: 'message', user, char };
+    if (s.subject === 'narrator') return { mode: 'narrator', who: 'the narrator', other: user, piece: 'passage', user, char };
+    return { mode: 'user', who: user, other: char, piece: 'message', user, char };
 }
 
 const box = () => document.getElementById('send_textarea');
@@ -97,12 +182,13 @@ function setBox(text, focus = true) {
     }
 }
 
-/** Average length of the speaker's last few messages, ignoring reasoning and HTML. */
-function recentWords(isUser) {
-    const msgs = (ctx().chat || []).filter((m) => m && !m.is_system && !!m.is_user === isUser).slice(-4);
+const CLEAN_ALL = { cleanReasoning: true, cleanHeaders: true, cleanPanels: true, cleanHtml: true };
+
+/** Average length of the last few messages from that side of the chat. */
+function recentWords(fromUser) {
+    const msgs = (ctx().chat || []).filter((m) => m && !m.is_system && !!m.is_user === fromUser).slice(-4);
     if (!msgs.length) return 0;
-    const total = msgs.reduce((n, m) => n + words(clean(m.mes, true)), 0);
-    return Math.round(total / msgs.length);
+    return Math.round(msgs.reduce((n, m) => n + words(clean(m.mes, CLEAN_ALL)), 0) / msgs.length);
 }
 
 function replyIsRunning() {
@@ -114,67 +200,135 @@ function replyIsRunning() {
 /* The task note                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Target word range. Flexible scales with your draft (Enhance) or with the speaker's usual length (Write). */
+/** Target word range. Flexible scales with your draft, or with how long that side usually writes. */
 function lengthRange(kind, draftWords, s) {
     let lo, hi;
-    if (LENGTHS[s.length]) {
+    if (s.length === 'custom') {
+        lo = num(s.lengthMin, 60);
+        hi = Math.max(num(s.lengthMax, 160), lo + 20);
+    } else if (LENGTHS[s.length]) {
         [lo, hi] = LENGTHS[s.length];
     } else if (kind === 'enhance') {
         const d = draftWords;
-        if (d < 15) [lo, hi] = [50, 120]; // a line or two: grow it into a full message
+        if (d < 15) [lo, hi] = [50, 120];            // a line or two: grow it into a full message
         else if (d < 60) [lo, hi] = [d * 1.6, d * 2.6]; // a short paragraph: about double
-        else [lo, hi] = [d * 1.1, d * 1.6]; // already detailed: polish, little padding
+        else [lo, hi] = [d * 1.1, d * 1.6];          // already detailed: polish, little padding
     } else {
-        const avg = recentWords(s.speaker !== 'char');
+        const avg = recentWords(s.subject === 'user');
         [lo, hi] = avg ? [Math.max(30, avg * 0.8), Math.max(90, avg * 1.6)] : [60, 150];
     }
     if (kind === 'enhance') lo = Math.max(lo, draftWords); // never shorter than the draft
     hi = Math.max(hi, lo * 1.15, lo + 20);
-    return [Math.round(lo), Math.round(clamp(hi, 40, 800))];
+    return [Math.round(lo), Math.round(clamp(hi, 40, 2000))];
 }
 
-function lengthLine(kind, draftWords, s) {
-    const [lo, hi] = lengthRange(kind, draftWords, s);
-    if (s.length !== 'flexible') return `Length: about ${lo}-${hi} words.`;
-    return kind === 'enhance'
-        ? `Length: flexible. As long as the draft's content needs: a short draft becomes a full message, a detailed one is polished without padding (about ${lo}-${hi} words).`
-        : `Length: flexible. As long as this moment needs (about ${lo}-${hi} words).`;
+const FAITH = {
+    strict: 'Change only the wording and the level of detail. Add no action, decision or line of dialogue that the draft does not already contain.',
+    balanced: 'Keep every action, decision and line of dialogue from the draft, in the same order. Small supporting beats (a gesture, a glance, a reaction to the surroundings) are fine; nothing that changes what happens.',
+    creative: 'Treat the draft as a skeleton: keep its intent and its key beats, and develop them with richer detail, dialogue and inner thought, as long as nothing contradicts the draft.',
+};
+
+const POV = {
+    first: 'Write in the first person ("I", "me").',
+    second: 'Write in the second person ("you").',
+    third: 'Write in the third person (he / she / they).',
+};
+
+const FORMAT = {
+    asterisks: 'Formatting: actions, narration and thoughts in *single asterisks*, spoken words in "double quotes".',
+    plain: 'Formatting: plain prose paragraphs with spoken words in "double quotes". No asterisks.',
+    dialogue: 'Write spoken dialogue only, with no narration or action lines.',
+};
+
+/** The rule list, built from the settings. Only rules that say something are included. */
+function buildRules(kind, text, s) {
+    const r = roles(s);
+    const [lo, hi] = lengthRange(kind, words(text), s);
+    const rules = [];
+
+    if (kind === 'enhance') {
+        rules.push(FAITH[s.faithfulness] || FAITH.balanced);
+        if (r.mode === 'user') rules.push(`If the draft already says what ${r.other} does or says, keep that as written. Otherwise do not write for ${r.other}.`);
+        else rules.push(`Keep anything the draft gives to ${r.other} as written, and add nothing else for ${r.other}.`);
+    } else if (r.mode === 'user') {
+        rules.push(`Write only ${r.who}. Leave ${r.other}'s words and actions to ${r.other}.`);
+    } else if (r.mode === 'char') {
+        rules.push(`Write ${r.char} and what happens around them. Do not write ${r.user}'s own actions, words or thoughts.`);
+    } else {
+        rules.push(`Write the scene, the events and any side characters. Do not decide what ${r.user} does, says or feels.`);
+    }
+
+    if (s.pov !== 'auto') rules.push(POV[s.pov]);
+    else if (kind === 'enhance') rules.push("Keep the draft's point of view and tense.");
+    else rules.push('Follow the point of view and tense of the recent messages.');
+
+    if (s.format !== 'auto') rules.push(FORMAT[s.format]);
+    else if (kind === 'enhance') rules.push("Keep the draft's formatting style.");
+
+    if (s.language === 'custom' && String(s.languageName || '').trim()) rules.push(`Write in ${String(s.languageName).trim()}.`);
+    else if (s.language === 'chat') rules.push('Write in the language used in this chat.');
+    else if (kind === 'enhance') rules.push('Write in the same language as the draft.');
+
+    rules.push(
+        s.length === 'flexible'
+            ? kind === 'enhance'
+                ? `Length: as long as the draft's content needs, roughly ${lo}-${hi} words. A short draft becomes a full message; a detailed one is polished without padding.`
+                : `Length: as long as this moment needs, roughly ${lo}-${hi} words.`
+            : `Length: about ${lo}-${hi} words.`,
+    );
+
+    if (s.noRepeat) rules.push('Do not repeat wording or descriptions from the recent messages.');
+    if (s.endOpen) rules.push(`Stop where ${r.mode === 'user' ? r.other : r.user} would answer, leaving the turn open.`);
+    return { rules, lo, hi, r };
+}
+
+/** Header lines that tell the model whose turn this is. */
+function buildHeader(kind, s, r) {
+    const title = kind === 'enhance' ? 'Enhance my draft' : 'Write something for me';
+    if (r.mode === 'user') return [`[${title}: this is ${r.user}'s own message, written for the player.]`];
+    if (r.mode === 'char') {
+        return [
+            `[${title}: this turn the player writes ${r.char}.]`,
+            `The player is taking over ${r.char} for this one message. It is sent from ${r.user}'s message box, but it contains ${r.char}'s actions, words and thoughts, written in the style of this story. For this message only, any instruction to write only ${r.user}, or never to write as ${r.char}, does not apply.`,
+        ];
+    }
+    return [
+        `[${title}: this turn the player writes the scene.]`,
+        `The player is narrating for this one message. It is sent from ${r.user}'s message box, but it describes the scene, the events and any side characters. For this message only, any instruction to write only ${r.user} does not apply.`,
+    ];
+}
+
+function applyMacros(template, map) {
+    return String(template).replace(/\{\{(\w+)\}\}/g, (whole, key) => (key in map ? map[key] : whole));
 }
 
 /**
- * The note added to the preset's own prompt. It only says what the preset cannot know:
- * the task, the draft or direction, the length and your notes. Style, tone and rules come from the preset.
+ * The note that is added as the last message. It says only what the preset cannot know:
+ * the task, your text, the rules from your settings and your notes. Everything else is the preset's.
  */
 function buildNote(kind, text, s) {
-    const { user, char } = names();
-    const asChar = s.speaker === 'char';
-    const who = asChar ? char : user;
-    const other = asChar ? user : char;
-    const piece = asChar ? 'reply' : 'message';
-    const lines = [];
+    const { rules, lo, hi, r } = buildRules(kind, text, s);
+    const notes = String((kind === 'enhance' ? s.notesEnhance : s.notesWrite) || '').trim();
+    const custom = String((kind === 'enhance' ? s.templateEnhance : s.templateWrite) || '').trim();
 
-    if (kind === 'enhance') {
-        lines.push(
-            `[Enhance my draft: ${who}'s turn]`,
-            `The player drafted ${who}'s next ${piece}:`,
-            `<draft>\n${text}\n</draft>`,
-            `Rewrite it into ${who}'s finished ${piece}, following your instructions and the style of this story.`,
-            `- Keep every action, line of dialogue and decision from the draft, in the same order. Enrich how they happen (senses, body language, voice, inner thoughts) and add nothing that changes what happens.`,
-            `- If the draft also says what ${other} does or says, keep it as written. Otherwise do not write for ${other}.`,
-            `- Keep the draft's language, point of view and tense.`,
-        );
-    } else {
-        lines.push(`[Write something for me: write ${who}'s next ${piece} for the player]`);
-        lines.push(text ? `Follow the player's direction closely:\n<direction>\n${text}\n</direction>` : `Continue naturally from the last message.`);
-        lines.push(
-            `- Write only ${who}. Leave ${other}'s words and actions to ${other}.`,
-            `- Follow the point of view, tense and formatting of ${who}'s earlier messages.`,
-        );
+    if (custom) {
+        const map = {
+            draft: text, direction: text, rules: rules.map((x) => `- ${x}`).join('\n'), notes,
+            subject: r.who, other: r.other, min: String(lo), max: String(hi),
+        };
+        const out = applyMacros(custom, map);
+        return ctx().substituteParams ? ctx().substituteParams(out) : out;
     }
-    lines.push(`- ${lengthLine(kind, words(text), s)}`);
-    const extra = String(s.extra || '').trim();
-    if (extra) lines.push(`- Player's notes: ${extra}`);
-    lines.push(`Output only ${who}'s ${piece}: no scene header, status block, notes or reasoning.`);
+
+    const lines = [...buildHeader(kind, s, r)];
+    if (kind === 'enhance') {
+        lines.push(`The player drafted this:`, `<draft>\n${text}\n</draft>`, `Rewrite it into the finished ${r.piece}, following your instructions and the style of this story.`);
+    } else {
+        lines.push(text ? `Follow the player's direction closely:\n<direction>\n${text}\n</direction>` : 'Continue naturally from the last message.');
+    }
+    lines.push(rules.map((x) => `- ${x}`).join('\n'));
+    if (notes) lines.push(`Player's notes: ${notes}`);
+    lines.push(`Output only the ${r.piece} itself: no scene header, status block, notes or reasoning.`);
     return lines.join('\n');
 }
 
@@ -190,23 +344,37 @@ const reThinkOpen = new RegExp(`<(${THINK})\\b[^>]*>[\\s\\S]*$`, 'i'); // reason
 const rePanelPair = new RegExp(`<(${PANELS})\\b[^>]*>(?:(?!<(?:${PANELS})\\b)[\\s\\S])*?<\\/\\1\\s*>`, 'gi');
 const rePanelOpen = new RegExp(`<(${PANELS})\\b[\\s\\S]*$`, 'i');
 
-/**
- * Removes reasoning and wrapper noise. With `deep`, also removes what presets add to narrator replies:
- * scene headers like "[ 08:15 PM | Day 3 | Tavern ]", status/tracker panels, HTML comments and tags
- * (the text inside inline tags such as <font> is kept).
- */
-function clean(raw, deep) {
-    let t = String(raw ?? '').replace(reThinkPair, '').replace(reThinkBefore, '').replace(reThinkOpen, '').trim();
-    t = t.replace(/^```[\w-]*\n?/, '').replace(/\n?```$/, '');
-    if (deep) {
+/** Turns "/pattern/flags" (or a bare pattern) into a RegExp, or null. */
+function parseRegex(line) {
+    const t = String(line).trim();
+    if (!t) return null;
+    try {
+        const m = t.match(/^\/(.*)\/([gimsuy]*)$/s);
+        return m ? new RegExp(m[1], m[2] || 'g') : new RegExp(t, 'g');
+    } catch (err) {
+        console.warn(TAG, 'bad clean-up pattern:', t, err);
+        return null;
+    }
+}
+
+/** Removes reasoning, preset extras and wrapper noise, according to the clean-up settings. */
+function clean(raw, s) {
+    let t = String(raw ?? '');
+    if (s.cleanReasoning) t = t.replace(reThinkPair, '').replace(reThinkBefore, '').replace(reThinkOpen, '');
+    t = t.trim().replace(/^```[\w-]*\n?/, '').replace(/\n?```$/, '');
+    if (s.cleanPanels) {
         t = t.replace(/<!--[\s\S]*?-->/g, '');
         for (let i = 0, prev = null; i < 20 && prev !== t; i++) {
             prev = t;
             t = t.replace(rePanelPair, ''); // innermost first, so nested panels go too
         }
         t = t.replace(rePanelOpen, '');
-        t = t.replace(/<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi, '');
-        t = t.replace(/^\s*\[[^\]\n]*\|[^\]\n]*\|[^\]\n]*\]\s*$/gm, '');
+    }
+    if (s.cleanHtml) t = t.replace(/<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi, '');
+    if (s.cleanHeaders) t = t.replace(/^\s*\[[^\]\n]*\|[^\]\n]*\|[^\]\n]*\]\s*$/gm, '');
+    for (const line of String(s.cleanCustom || '').split('\n')) {
+        const re = parseRegex(line);
+        if (re) t = t.replace(re, '');
     }
     t = t.replace(/<\/?(draft|direction)>/gi, '');
     t = t.replace(/^\s*(?:\*\*)?(?:rewritten|enhanced|revised|final)(?: (?:message|draft|reply|version))?(?:\*\*)?\s*:\s*(?:\*\*)?/i, '');
@@ -219,27 +387,20 @@ function clean(raw, deep) {
 /* Generation                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Runs the note through SillyTavern with the active preset. Returns the raw text. */
-async function generate(note, s) {
+/** One path for every mode: SillyTavern's Impersonate, with the note as the last message. */
+async function generate(note) {
     const c = ctx();
     state.lastPrompt = note;
+    const inject = typeof c.setExtensionPrompt === 'function';
 
-    if (s.speaker === 'char') {
-        // A quiet character turn: the preset's narrator prompts apply, the chat is not changed.
-        const quiet = c.generateQuietPrompt;
-        return quiet.length >= 2 ? await quiet(note, false, false) : await quiet({ quietPrompt: note, removeReasoning: true });
-    }
-
-    // Impersonate: the preset's impersonation prompt, impersonate-only prompts, prefill and
-    // user-input regex all apply. The note goes in as the last user message and is removed afterwards.
     setBox('', false); // like /impersonate: start from an empty box (the draft is already saved)
-    c.setExtensionPrompt(NOTE_KEY, note, 1 /* in chat */, 0 /* depth */, false, 1 /* user role */);
+    if (inject) c.setExtensionPrompt(NOTE_KEY, note, 1 /* in chat */, 0 /* depth */, false, 1 /* user role */);
     try {
-        const ret = await c.generate('impersonate');
+        const ret = await c.generate('impersonate', inject ? {} : { quiet_prompt: note, quietToLoud: true });
         const text = box()?.value ?? '';
         return text.trim() ? text : String(ret ?? '');
     } finally {
-        c.setExtensionPrompt(NOTE_KEY, '', 1, 0, false, 1);
+        if (inject) c.setExtensionPrompt(NOTE_KEY, '', 1, 0, false, 1);
     }
 }
 
@@ -254,7 +415,7 @@ function cancel() {
 }
 
 /** Enhance or Write. Returns the text placed in the box, or null. */
-async function run(kind, overrideText) {
+async function run(kind, overrideText, overrideSubject) {
     const s = settings();
     if (!s.enabled) return null;
     if (state.busy) return cancel(), null;
@@ -266,6 +427,7 @@ async function run(kind, overrideText) {
     const original = box()?.value ?? '';
     const text = String(overrideText ?? original).trim();
     if (kind === 'enhance' && !text) return toastr.warning('Type a draft in the message box first.', 'Draft Enhancer'), null;
+    const opts = overrideSubject ? { ...s, subject: overrideSubject } : s;
 
     state.busy = true;
     closeMenu();
@@ -277,7 +439,7 @@ async function run(kind, overrideText) {
             updateButton();
             let raw;
             try {
-                raw = await generate(buildNote(kind, text, s), s);
+                raw = await generate(buildNote(kind, text, opts));
             } catch (err) {
                 if (state.cancelled) throw new Cancelled();
                 throw err;
@@ -288,13 +450,13 @@ async function run(kind, overrideText) {
             if (state.cancelled) throw new Cancelled();
 
             state.lastOutput = String(raw ?? '');
-            if (s.debug) console.log(TAG, `${kind} as ${s.speaker}\n--- note ---\n${state.lastPrompt}\n--- output ---\n${state.lastOutput}`);
-            result = clean(raw, s.clean);
+            if (s.debug) console.log(TAG, `${kind}, as ${opts.subject}\n--- note ---\n${state.lastPrompt}\n--- raw output ---\n${state.lastOutput}`);
+            result = clean(raw, s);
             if (!result) throw new Error('The model returned nothing usable. Check the connection, or raise the response length if your model uses reasoning.');
 
             if (!s.preview) break;
             setBox(original, false);
-            const choice = await showPreview(text, result, kind);
+            const choice = await showPreview(text, result, kind, opts);
             if (choice.action === 'cancel') return null;
             if (choice.action === 'use') {
                 result = choice.text.trim();
@@ -328,12 +490,19 @@ function undo() {
     state.undo = null;
 }
 
-function toggleSpeaker() {
+function cycleSubject() {
     const s = settings();
-    s.speaker = s.speaker === 'char' ? 'user' : 'char';
+    const i = SUBJECTS.findIndex(([v]) => v === s.subject);
+    s.subject = SUBJECTS[(i + 1) % SUBJECTS.length][0];
     save();
     refreshMenu();
-    $('#de_settings [data-key="speaker"]').val(s.speaker);
+    $('#de_settings [data-key="subject"]').val(s.subject);
+}
+
+/** The label shown in the menu for the current "Write as" choice. */
+function subjectLabel(s) {
+    const { user, char } = names();
+    return { user, char, narrator: 'Narrator' }[s.subject] ?? user;
 }
 
 /* ------------------------------------------------------------------ */
@@ -344,8 +513,9 @@ const menu = () => document.getElementById('de_menu');
 const menuOpen = () => !!menu()?.hasAttribute('open');
 
 /*
- * The menu and the preview are <dialog> elements opened with showModal(). That puts them in the browser's
- * top layer, positioned against the screen, so themes that transform the page cannot push them off-screen.
+ * The menu and the preview are <dialog> elements opened with showModal(), which puts them in the
+ * browser's top layer, positioned against the screen. Themes that transform the page cannot push
+ * them off-screen that way.
  */
 function openDialog(el) {
     if (typeof el.showModal === 'function') el.showModal();
@@ -371,10 +541,10 @@ function updateButton() {
 }
 
 function refreshMenu() {
-    const { user, char } = names();
-    const asChar = settings().speaker === 'char';
-    $('#de_menu .de-speaker').text(`Writing as: ${asChar ? char : user}`);
+    const s = settings();
+    $('#de_menu .de-subject').text(`Writing as: ${subjectLabel(s)}`);
     $('#de_menu [data-action="undo"]').toggleClass('de-disabled', state.undo === null);
+    $('#de_menu .de-item kbd').toggleClass('displayNone', !s.shortcuts);
 }
 
 /** Small popup above the feather button, kept inside the screen. Same on phone and desktop. */
@@ -410,25 +580,29 @@ function buildUI() {
                 <div class="de-item" data-action="enhance"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Enhance my draft</span><kbd>Alt+E</kbd></div>
                 <div class="de-item" data-action="write"><i class="fa-solid fa-pen-nib"></i><span>Write something for me</span><kbd>Alt+W</kbd></div>
                 <div class="de-sep"></div>
-                <div class="de-item" data-action="speaker" title="Switch between writing as you and as the character"><i class="fa-solid fa-masks-theater"></i><span class="de-speaker"></span></div>
+                <div class="de-item" data-action="subject" title="Who the message is about"><i class="fa-solid fa-masks-theater"></i><span class="de-subject"></span></div>
                 <div class="de-item" data-action="undo"><i class="fa-solid fa-rotate-left"></i><span>Undo last change</span><kbd>Alt+Z</kbd></div>
             </div>
         </dialog>
     `);
 
-    // Also in SillyTavern's Extensions (wand) menu.
-    const item = (id, icon, label) =>
-        `<div id="${id}" class="list-group-item flex-container flexGap5 interactable" tabindex="0">` +
-        `<div class="fa-solid ${icon} extensionsMenuExtensionButton"></div><span>${label}</span></div>`;
-    $('#extensionsMenu').append(item('de_ext_enhance', 'fa-wand-magic-sparkles', 'Enhance my draft'), item('de_ext_write', 'fa-pen-nib', 'Write something for me'));
+    if (settings().wandMenu) {
+        const item = (id, icon, label) =>
+            `<div id="${id}" class="list-group-item flex-container flexGap5 interactable" tabindex="0">` +
+            `<div class="fa-solid ${icon} extensionsMenuExtensionButton"></div><span>${label}</span></div>`;
+        $('#extensionsMenu').append(item('de_ext_enhance', 'fa-wand-magic-sparkles', 'Enhance my draft'), item('de_ext_write', 'fa-pen-nib', 'Write something for me'));
+    }
     updateButton();
 }
 
 let lastTap = { key: '', at: 0 };
-/** Touch screens can deliver the same tap twice; ignore the second one. */
-function duplicateTap(key) {
+/**
+ * Touch screens can deliver the same tap twice; ignore the echo. The window is short for controls
+ * that are meant to be tapped repeatedly (the "Write as" cycler) and long for the ones that start work.
+ */
+function duplicateTap(key, within = 300) {
     const now = Date.now();
-    if (lastTap.key === key && now - lastTap.at < 300) return true;
+    if (lastTap.key === key && now - lastTap.at < within) return true;
     lastTap = { key, at: now };
     return false;
 }
@@ -453,8 +627,8 @@ function bindEvents() {
         const item = t.closest('#de_menu .de-item');
         if (item) {
             const action = item.dataset.action;
-            if (item.classList.contains('de-disabled') || duplicateTap(action)) return;
-            if (action === 'speaker') return toggleSpeaker(); // menu stays open
+            if (item.classList.contains('de-disabled') || duplicateTap(action, action === 'subject' ? 60 : 300)) return;
+            if (action === 'subject') return cycleSubject(); // the menu stays open
             if (action === 'undo') return undo();
             return run(action);
         }
@@ -483,7 +657,7 @@ function bindEvents() {
     });
     // Shortcuts inside the message box. Physical key positions, so any keyboard layout works.
     $(document).on('keydown.de', '#send_textarea', (e) => {
-        if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (!settings().shortcuts || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
         const fn = { KeyE: () => run('enhance'), KeyW: () => run('write'), KeyZ: undo }[e.code];
         if (fn) {
             e.preventDefault();
@@ -496,7 +670,7 @@ function bindEvents() {
 /* Preview                                                             */
 /* ------------------------------------------------------------------ */
 
-function showPreview(original, result, kind) {
+function showPreview(original, result, kind, s) {
     return new Promise((resolve) => {
         const $d = $(`
             <dialog class="de-modal" id="de_modal" aria-label="Draft Enhancer preview">
@@ -511,7 +685,7 @@ function showPreview(original, result, kind) {
                     </div>
                 </div>
             </dialog>`);
-        $d.find('.de-modal-title').text(kind === 'write' ? 'Write something for me' : 'Enhance my draft');
+        $d.find('.de-modal-title').text(`${kind === 'write' ? 'Write something for me' : 'Enhance my draft'} — as ${subjectLabel(s)}`);
         $d.find('summary').text(kind === 'write' ? 'Your direction' : 'Your draft');
         $d.find('.de-original-text').text(original || '(none)');
         $d.find('#de_preview_text').val(result);
@@ -539,10 +713,46 @@ function showPreview(original, result, kind) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Settings panel                                                      */
+/* Settings panel (built from FIELDS)                                  */
 /* ------------------------------------------------------------------ */
 
-const SETTINGS_HTML = `
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function fieldHtml(f) {
+    if (f.section) return `</div><h4 class="de-section">${esc(f.section)}</h4><div class="de-fields">`;
+    const row = (inner) => `<div class="de-row${f.grid ? ' de-col' : ''}" data-row="${f.key}">${inner}</div>`;
+    const hint = f.hint ? `<small>${esc(f.hint)}</small>` : '';
+    const label = `<label>${esc(f.label)}</label>`;
+    const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : '';
+
+    switch (f.type) {
+        case 'bool':
+            return `<label class="checkbox_label de-check" data-row="${f.key}"><input type="checkbox" data-key="${f.key}"><span>${esc(f.label)}</span></label>`;
+        case 'select':
+            return row(`${label}<select class="text_pole" data-key="${f.key}">${f.options.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('')}</select>${hint}`);
+        case 'number':
+            return row(`${label}<input type="number" class="text_pole" data-key="${f.key}" min="${f.min}" max="${f.max}" step="${f.step}">${hint}`);
+        case 'text':
+            return row(`${label}<input type="text" class="text_pole" data-key="${f.key}"${ph}>${hint}`);
+        case 'area':
+            return row(
+                `${label}<textarea class="text_pole" data-key="${f.key}"${ph}></textarea>` +
+                    (f.fill ? `<div class="menu_button de-fill" data-fill="${f.fill}" data-target="${f.key}">Insert the built-in instruction</div>` : '') +
+                    hint,
+            );
+        default:
+            return '';
+    }
+}
+
+function applyVisibility() {
+    const s = settings();
+    for (const f of FIELDS) if (f.showIf) $(`#de_settings [data-row="${f.key}"]`).toggleClass('displayNone', !f.showIf(s));
+}
+
+function buildSettings() {
+    $('#de_settings').remove();
+    const html = `
 <div id="de_settings" class="extension_container">
   <div class="inline-drawer">
     <div class="inline-drawer-toggle inline-drawer-header">
@@ -550,51 +760,48 @@ const SETTINGS_HTML = `
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <label class="checkbox_label"><input type="checkbox" data-key="enabled"><span>Enabled</span></label>
-      <div class="de-grid">
-        <div class="de-row">
-          <label>Length</label>
-          <select class="text_pole" data-key="length">
-            <option value="flexible">Flexible (fits your text)</option>
-            <option value="short">Short (30-80 words)</option>
-            <option value="medium">Medium (80-180 words)</option>
-            <option value="long">Long (180-350 words)</option>
-          </select>
-        </div>
-        <div class="de-row">
-          <label>Write as</label>
-          <select class="text_pole" data-key="speaker">
-            <option value="user">You (your persona)</option>
-            <option value="char">The character</option>
-          </select>
-        </div>
-      </div>
-      <div class="de-row">
-        <label>Your notes (added to every request)</label>
-        <textarea class="text_pole" data-key="extra" placeholder="e.g. Keep my character guarded and sarcastic."></textarea>
-      </div>
-      <label class="checkbox_label"><input type="checkbox" data-key="preview"><span>Preview before applying (Use / Retry / Cancel)</span></label>
-      <label class="checkbox_label"><input type="checkbox" data-key="autoSend"><span>Send automatically</span></label>
-      <label class="checkbox_label"><input type="checkbox" data-key="clean"><span>Remove preset extras from the result (scene headers, status panels, HTML)</span></label>
-      <label class="checkbox_label"><input type="checkbox" data-key="debug"><span>Log requests to the browser console</span></label>
-      <small>Draft Enhancer follows your active preset. Writing as you uses SillyTavern's Impersonate; writing as the character uses a quiet character turn.</small>
+      <div class="de-fields">${FIELDS.map(fieldHtml).join('')}</div>
+      <div class="de-row"><div class="menu_button" id="de_reset">Reset everything to defaults</div></div>
+      <small>Draft Enhancer follows your active preset: it runs through SillyTavern's Impersonate, so your preset, its jailbreak, its impersonation prompt, lorebooks and history all apply. The result always goes into your message box.</small>
     </div>
   </div>
 </div>`;
+    ($('#extensions_settings2').length ? $('#extensions_settings2') : $('#extensions_settings')).append(html);
+    syncSettings();
 
-function buildSettings() {
-    $('#de_settings').remove();
-    ($('#extensions_settings2').length ? $('#extensions_settings2') : $('#extensions_settings')).append(SETTINGS_HTML);
+    $('#de_settings').on('input change', '[data-key]', function () {
+        const f = FIELDS.find((x) => x.key === this.dataset.key);
+        let v = this.type === 'checkbox' ? this.checked : this.value;
+        if (f?.type === 'number') v = clamp(num(v, f.def), f.min, f.max);
+        settings()[this.dataset.key] = v;
+        save();
+        applyVisibility();
+        updateButton();
+        if (this.dataset.key === 'wandMenu') buildUI();
+    });
+
+    $('#de_settings').on('click', '.de-fill', function () {
+        const kind = this.dataset.fill;
+        const text = buildNote(kind, kind === 'enhance' ? '{{draft}}' : '{{direction}}', { ...settings(), [kind === 'enhance' ? 'templateEnhance' : 'templateWrite']: '' });
+        $(`#de_settings [data-key="${this.dataset.target}"]`).val(text).trigger('input');
+    });
+
+    $('#de_reset').on('click', () => {
+        Object.assign(settings(), DEFAULTS);
+        save();
+        syncSettings();
+        buildUI();
+        toastr.success('Settings reset', 'Draft Enhancer', { timeOut: 1500 });
+    });
+}
+
+function syncSettings() {
     const s = settings();
     $('#de_settings [data-key]').each((_, el) => {
         if (el.type === 'checkbox') el.checked = !!s[el.dataset.key];
         else el.value = s[el.dataset.key] ?? '';
     });
-    $('#de_settings').on('input change', '[data-key]', function () {
-        settings()[this.dataset.key] = this.type === 'checkbox' ? this.checked : this.value;
-        save();
-        updateButton();
-    });
+    applyVisibility();
 }
 
 /* ------------------------------------------------------------------ */
@@ -603,7 +810,7 @@ function buildSettings() {
 
 async function registerCommands() {
     try {
-        const [{ SlashCommandParser }, { SlashCommand }, { ARGUMENT_TYPE, SlashCommandArgument }] = await Promise.all([
+        const [{ SlashCommandParser }, { SlashCommand }, { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument }] = await Promise.all([
             import('../../../slash-commands/SlashCommandParser.js'),
             import('../../../slash-commands/SlashCommand.js'),
             import('../../../slash-commands/SlashCommandArgument.js'),
@@ -613,8 +820,17 @@ async function registerCommands() {
                 SlashCommand.fromProps({
                     name,
                     aliases: [alias],
-                    callback: async (_args, value) => (await run(kind, String(value || '').trim() || undefined)) ?? '',
+                    callback: async (args, value) => (await run(kind, String(value || '').trim() || undefined, args?.as ? String(args.as) : undefined)) ?? '',
                     returns: 'the text placed in the message box',
+                    namedArgumentList: [
+                        SlashCommandNamedArgument.fromProps({
+                            name: 'as',
+                            description: 'who to write as, for this run only',
+                            typeList: [ARGUMENT_TYPE.STRING],
+                            isRequired: false,
+                            enumList: SUBJECTS.map(([v]) => v),
+                        }),
+                    ],
                     unnamedArgumentList: [SlashCommandArgument.fromProps({ description: argHelp, typeList: [ARGUMENT_TYPE.STRING], isRequired: false })],
                     helpString: help,
                 }),
@@ -631,12 +847,12 @@ async function registerCommands() {
 /* ------------------------------------------------------------------ */
 
 globalThis.DraftEnhancer = {
-    enhance: (text) => run('enhance', text),
-    write: (direction) => run('write', direction),
+    enhance: (text, as) => run('enhance', text, as),
+    write: (direction, as) => run('write', direction, as),
     undo,
     getLastPrompt: () => state.lastPrompt,
     getLastOutput: () => state.lastOutput,
-    _internals: { settings, buildNote, lengthRange, clean, state },
+    _internals: { settings, buildNote, buildRules, lengthRange, clean, roles, state, FIELDS, DEFAULTS },
 };
 
 jQuery(async () => {
