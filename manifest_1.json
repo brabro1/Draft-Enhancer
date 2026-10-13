@@ -1,0 +1,12 @@
+{
+    "display_name": "Draft Enhancer",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "brabro1",
+    "version": "1.1.0",
+    "homePage": "https://github.com/brabro1/Draft-Enhancer",
+    "auto_update": false
+}
