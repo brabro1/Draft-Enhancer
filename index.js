@@ -33,7 +33,7 @@ const FIELDS = [
     { key: 'enabled', type: 'bool', def: true, label: 'Enabled' },
     { key: 'wandMenu', type: 'bool', def: true, label: 'Also show the actions in the Extensions (wand) menu' },
     { key: 'shortcuts', type: 'bool', def: true, label: 'Keyboard shortcuts in the message box (Alt+E, Alt+W, Alt+Z)' },
-    { key: 'preview', type: 'bool', def: false, label: 'Preview before applying (Use / Retry / Cancel)' },
+    { key: 'actionBar', type: 'bool', def: true, label: 'Show Keep / Regenerate / Discard after each result' },
     { key: 'autoSend', type: 'bool', def: false, label: 'Send automatically' },
     { key: 'debug', type: 'bool', def: false, label: 'Log every request to the browser console' },
 
@@ -104,6 +104,7 @@ const state = {
     generating: false,
     cancelled: false,
     undo: null,
+    lastRun: null, // { kind, text, subject, original } — what Regenerate and Discard act on
     lastPrompt: '',
     lastOutput: '',
 };
@@ -131,7 +132,6 @@ function migrate(s) {
     Object.assign(s, DEFAULTS);
     const keep = (k, v) => { if (v !== undefined) s[k] = v; };
     keep('enabled', old.enabled);
-    keep('preview', old.preview);
     keep('autoSend', old.autoSend);
     keep('debug', old.debug);
     keep('subject', old.speaker === 'char' ? 'char' : old.speaker === 'user' ? 'user' : undefined);
@@ -414,8 +414,13 @@ function cancel() {
     }
 }
 
-/** Enhance or Write. Returns the text placed in the box, or null. */
-async function run(kind, overrideText, overrideSubject) {
+/**
+ * Enhance or Write.
+ * opts.original       the text to restore on Discard (the draft before the first run)
+ * opts.restoreOnError what to put back if this attempt fails
+ * opts.fromBar        true when the Regenerate button started it
+ */
+async function run(kind, overrideText, overrideSubject, opts = {}) {
     const s = settings();
     if (!s.enabled) return null;
     if (state.busy) return cancel(), null;
@@ -424,53 +429,49 @@ async function run(kind, overrideText, overrideSubject) {
     if (c.characterId === undefined && !c.groupId) return toastr.warning('Open a chat first.', 'Draft Enhancer'), null;
     if (replyIsRunning()) return toastr.warning('Wait for the current reply to finish.', 'Draft Enhancer'), null;
 
-    const original = box()?.value ?? '';
+    const original = opts.original ?? (box()?.value ?? '');
     const text = String(overrideText ?? original).trim();
     if (kind === 'enhance' && !text) return toastr.warning('Type a draft in the message box first.', 'Draft Enhancer'), null;
-    const opts = overrideSubject ? { ...s, subject: overrideSubject } : s;
+    const subject = overrideSubject || s.subject;
 
     state.busy = true;
+    state.cancelled = false;
+    state.generating = true;
     closeMenu();
+    if (opts.fromBar) setBarWorking(true);
+    else hideBar();
+    updateButton();
+
     try {
-        let result;
-        for (;;) {
-            state.cancelled = false;
-            state.generating = true;
-            updateButton();
-            let raw;
-            try {
-                raw = await generate(buildNote(kind, text, opts));
-            } catch (err) {
-                if (state.cancelled) throw new Cancelled();
-                throw err;
-            } finally {
-                state.generating = false;
-                updateButton();
-            }
+        let raw;
+        try {
+            raw = await generate(buildNote(kind, text, { ...s, subject }));
+        } catch (err) {
             if (state.cancelled) throw new Cancelled();
-
-            state.lastOutput = String(raw ?? '');
-            if (s.debug) console.log(TAG, `${kind}, as ${opts.subject}\n--- note ---\n${state.lastPrompt}\n--- raw output ---\n${state.lastOutput}`);
-            result = clean(raw, s);
-            if (!result) throw new Error('The model returned nothing usable. Check the connection, or raise the response length if your model uses reasoning.');
-
-            if (!s.preview) break;
-            setBox(original, false);
-            const choice = await showPreview(text, result, kind, opts);
-            if (choice.action === 'cancel') return null;
-            if (choice.action === 'use') {
-                result = choice.text.trim();
-                break;
-            }
+            throw err;
         }
+        if (state.cancelled) throw new Cancelled();
+
+        state.lastOutput = String(raw ?? '');
+        if (s.debug) console.log(TAG, `${kind}, as ${subject}\n--- note ---\n${state.lastPrompt}\n--- raw output ---\n${state.lastOutput}`);
+        const result = clean(raw, s);
+        if (!result) throw new Error('The model returned nothing usable. Check the connection, or raise the response length if your model uses reasoning.');
 
         state.undo = original;
+        state.lastRun = { kind, text, subject, original };
         setBox(result);
-        toastr.success(kind === 'enhance' ? 'Draft enhanced' : 'Message written', 'Draft Enhancer', { timeOut: 1500 });
-        if (s.autoSend) document.getElementById('send_but')?.click();
+        if (s.autoSend) {
+            hideBar();
+            document.getElementById('send_but')?.click();
+        } else if (s.actionBar) {
+            showBar();
+        } else {
+            toastr.success(kind === 'enhance' ? 'Draft enhanced' : 'Message written', 'Draft Enhancer', { timeOut: 1500 });
+        }
         return result;
     } catch (err) {
-        setBox(original, false); // never lose the draft
+        setBox(opts.restoreOnError ?? original, false); // never lose what was in the box
+        if (opts.fromBar) showBar(); // a failed Regenerate leaves the earlier result and the bar
         if (err instanceof Cancelled) toastr.info('Cancelled', 'Draft Enhancer', { timeOut: 1500 });
         else {
             console.error(TAG, err);
@@ -479,12 +480,51 @@ async function run(kind, overrideText, overrideSubject) {
         return null;
     } finally {
         state.busy = false;
+        state.generating = false;
+        setBarWorking(false);
         updateButton();
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Keep / Regenerate / Discard bar                                     */
+/* ------------------------------------------------------------------ */
+
+const bar = () => document.getElementById('de_bar');
+
+function showBar() {
+    if (!settings().actionBar) return;
+    $('#de_bar').removeClass('displayNone de-working');
+}
+
+function hideBar() {
+    $('#de_bar').addClass('displayNone').removeClass('de-working');
+}
+
+function setBarWorking(on) {
+    $('#de_bar').toggleClass('de-working', !!on);
+}
+
+function barAction(action) {
+    const last = state.lastRun;
+    if (action === 'keep') {
+        hideBar();
+        box()?.focus();
+        return;
+    }
+    if (action === 'discard') {
+        setBox(last ? last.original : '');
+        state.undo = null;
+        hideBar();
+        return;
+    }
+    if (!last) return hideBar();
+    return run(last.kind, last.text, last.subject, { original: last.original, restoreOnError: box()?.value ?? '', fromBar: true });
+}
+
 function undo() {
     closeMenu();
+    hideBar();
     if (state.undo === null) return toastr.info('Nothing to undo.', 'Draft Enhancer', { timeOut: 1500 });
     setBox(state.undo);
     state.undo = null;
@@ -532,6 +572,7 @@ const closeMenu = () => closeDialog(menu());
 
 function updateButton() {
     const on = !!settings().enabled;
+    if (!on) hideBar();
     $('#de_button')
         .toggleClass('displayNone', !on)
         .toggleClass('fa-feather-pointed', !state.generating)
@@ -568,7 +609,17 @@ function toggleMenu() {
 
 function buildUI() {
     closeMenu();
-    $('#de_button, #de_menu, #de_ext_enhance, #de_ext_write').remove();
+    $('#de_button, #de_menu, #de_bar, #de_ext_enhance, #de_ext_write').remove();
+
+    // Sits right above the message box, where SillyTavern puts its own confirm bar.
+    const barHtml = `
+        <div id="de_bar" class="de-bar displayNone">
+            <div class="de-bar-btn de-bar-keep" data-bar="keep"><i class="fa-solid fa-check"></i><span>Keep</span></div>
+            <div class="de-bar-btn" data-bar="regenerate"><i class="fa-solid fa-rotate"></i><span>Regenerate</span></div>
+            <div class="de-bar-btn de-bar-discard" data-bar="discard"><i class="fa-solid fa-xmark"></i><span>Discard</span></div>
+        </div>`;
+    if ($('#send_form').length) $('#send_form').before(barHtml);
+    else $('#form_sheld, body').first().append(barHtml);
 
     ($('#leftSendForm').length ? $('#leftSendForm') : $('#send_form')).append(
         '<div id="de_button" class="fa-solid fa-feather-pointed interactable" tabindex="0" role="button" title="Draft Enhancer"></div>',
@@ -632,6 +683,13 @@ function bindEvents() {
             if (action === 'undo') return undo();
             return run(action);
         }
+        const barBtn = t.closest('#de_bar [data-bar]');
+        if (barBtn) {
+            if (duplicateTap(`bar:${barBtn.dataset.bar}`)) return;
+            return barAction(barBtn.dataset.bar);
+        }
+        if (t.closest('#send_but')) hideBar(); // the message is on its way out
+
         const ext = t.closest('#de_ext_enhance, #de_ext_write');
         if (ext) {
             if (duplicateTap(ext.id)) return;
@@ -649,6 +707,13 @@ function bindEvents() {
     window.addEventListener('mousedown', down, true);
     handlers = { click, down };
 
+    try {
+        const c = ctx();
+        c.eventSource?.on?.(c.eventTypes?.CHAT_CHANGED ?? 'chat_id_changed', hideBar);
+    } catch (err) {
+        console.warn(TAG, err);
+    }
+
     $(document).on('keydown.de', '#de_button', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -657,58 +722,13 @@ function bindEvents() {
     });
     // Shortcuts inside the message box. Physical key positions, so any keyboard layout works.
     $(document).on('keydown.de', '#send_textarea', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) hideBar(); // sending
         if (!settings().shortcuts || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
         const fn = { KeyE: () => run('enhance'), KeyW: () => run('write'), KeyZ: undo }[e.code];
         if (fn) {
             e.preventDefault();
             fn();
         }
-    });
-}
-
-/* ------------------------------------------------------------------ */
-/* Preview                                                             */
-/* ------------------------------------------------------------------ */
-
-function showPreview(original, result, kind, s) {
-    return new Promise((resolve) => {
-        const $d = $(`
-            <dialog class="de-modal" id="de_modal" aria-label="Draft Enhancer preview">
-                <div class="de-modal-box">
-                    <div class="de-modal-title"></div>
-                    <details class="de-original"><summary></summary><pre class="de-original-text" dir="auto"></pre></details>
-                    <textarea id="de_preview_text" class="text_pole" dir="auto"></textarea>
-                    <div class="de-modal-actions">
-                        <div class="menu_button" data-act="cancel">Cancel</div>
-                        <div class="menu_button" data-act="retry"><i class="fa-solid fa-rotate"></i> Retry</div>
-                        <div class="menu_button" data-act="use"><i class="fa-solid fa-check"></i> Use this</div>
-                    </div>
-                </div>
-            </dialog>`);
-        $d.find('.de-modal-title').text(`${kind === 'write' ? 'Write something for me' : 'Enhance my draft'} — as ${subjectLabel(s)}`);
-        $d.find('summary').text(kind === 'write' ? 'Your direction' : 'Your draft');
-        $d.find('.de-original-text').text(original || '(none)');
-        $d.find('#de_preview_text').val(result);
-
-        let done = false;
-        const finish = (action) => {
-            if (done) return;
-            done = true;
-            const text = String($d.find('#de_preview_text').val() ?? '');
-            closeDialog($d[0]);
-            $d.remove();
-            resolve({ action, text });
-        };
-        $d.on('click', '[data-act]', function () {
-            finish(this.dataset.act);
-        });
-        // Backdrop press = cancel (mousedown, so selecting text and releasing outside does not close it).
-        $d.on('mousedown', (e) => e.target === $d[0] && finish('cancel'));
-        $d.on('cancel', (e) => (e.preventDefault(), finish('cancel'))); // Escape / back gesture
-
-        $('body').append($d);
-        openDialog($d[0]);
-        $d.find('#de_preview_text').trigger('focus');
     });
 }
 
@@ -852,7 +872,7 @@ globalThis.DraftEnhancer = {
     undo,
     getLastPrompt: () => state.lastPrompt,
     getLastOutput: () => state.lastOutput,
-    _internals: { settings, buildNote, buildRules, lengthRange, clean, roles, state, FIELDS, DEFAULTS },
+    _internals: { settings, buildNote, buildRules, lengthRange, clean, roles, barAction, state, FIELDS, DEFAULTS },
 };
 
 jQuery(async () => {

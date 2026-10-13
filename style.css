@@ -103,91 +103,94 @@
     display: none;
 }
 
-/* ---------- Preview window (modal <dialog>) ---------- */
-.de-modal {
-    inset: 0;
-    margin: auto;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-sizing: border-box;
-    width: min(720px, calc(100vw - 24px));
-    max-width: none;
-    height: fit-content;
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
-    overflow: visible;
-    color: var(--SmartThemeBodyColor, #ddd);
-    font: inherit;
-}
-
-.de-modal::backdrop {
-    background: rgba(0, 0, 0, 0.55);
-}
-
-.de-modal-box {
+/* ---------- Keep / Regenerate / Discard bar ----------
+   Sits directly above the message box, in the same slot as SillyTavern's own confirm bar. */
+.de-bar {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    gap: 5px;
     box-sizing: border-box;
     width: 100%;
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
-    padding: 16px;
-    border-radius: 14px;
+    margin: 0 auto 4px;
+    padding: 4px;
+    border-radius: 12px;
     border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
     background: var(--SmartThemeBlurTintColor, #1e1e1e);
     backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
-    color: var(--SmartThemeBodyColor, inherit);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-    overflow: auto;
+    color: var(--SmartThemeBodyColor, #ddd);
+    white-space: normal;
 }
 
-.de-modal-title {
-    font-weight: 600;
-    font-size: 1.1em;
-}
-
-.de-original {
-    font-size: 0.9em;
-    opacity: 0.85;
-}
-
-.de-original summary {
-    cursor: pointer;
-}
-
-.de-original-text {
-    margin: 6px 0 0;
-    padding: 8px 10px;
-    max-height: 160px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    border-radius: 8px;
-    background: rgba(128, 128, 128, 0.15);
-    font-family: inherit;
-}
-
-#de_preview_text {
-    width: 100%;
-    min-height: 220px;
-    max-height: 55vh;
-    resize: vertical;
-    box-sizing: border-box;
-}
-
-.de-modal-actions {
+.de-bar-btn {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 5px 8px;
+    border-radius: 9px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    font-weight: 500;
+    transition: background 0.12s ease, filter 0.12s ease;
 }
 
-.de-modal-actions .menu_button {
-    width: auto;
-    margin: 0;
+.de-bar-btn i {
+    font-size: 0.9em;
+    opacity: 0.9;
+}
+
+.de-bar-btn:hover {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.de-bar-keep {
+    background: var(--SmartThemeQuoteColor, #4a55c7);
+    color: #fff;
+}
+
+.de-bar-keep:hover {
+    background: var(--SmartThemeQuoteColor, #4a55c7);
+    filter: brightness(1.15);
+}
+
+.de-bar-discard {
+    color: var(--fullred, #ff5f5f);
+}
+
+/* While Regenerate is running */
+.de-bar.de-working {
+    pointer-events: none;
+}
+
+.de-bar.de-working .de-bar-btn {
+    opacity: 0.45;
+}
+
+.de-bar.de-working [data-bar="regenerate"] i {
+    animation: de-spin 0.9s linear infinite;
+}
+
+@keyframes de-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Narrow screens: icons only, so the three buttons always fit */
+@media (max-width: 420px) {
+    .de-bar-btn span {
+        font-size: 0.9em;
+    }
+
+    .de-bar-btn {
+        gap: 5px;
+        padding: 5px 4px;
+    }
 }
 
 /* ---------- Settings panel ---------- */
@@ -248,11 +251,9 @@
     margin-top: 12px;
 }
 
-/* No focus ring on the dialog surfaces themselves (they receive focus when opened). */
+/* No focus ring on the menu surface itself (it receives focus when opened). */
 .de-menu:focus,
-.de-menu:focus-visible,
-.de-modal:focus,
-.de-modal:focus-visible {
+.de-menu:focus-visible {
     outline: none;
 }
 
