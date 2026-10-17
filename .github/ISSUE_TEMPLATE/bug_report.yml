@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Draft Enhancer version
+      placeholder: e.g. 2.1.0-beta.1
+    validations:
+      required: true
+  - type: input
+    id: st
+    attributes:
+      label: SillyTavern version
+      placeholder: e.g. 1.13.0 (release or staging)
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: API, model and preset
+      placeholder: e.g. OpenRouter, some-model, preset name
+  - type: textarea
+    id: log
+    attributes:
+      label: Console output
+      description: Turn on "Log every request to the browser console" in the settings, repeat the problem, and paste the output here. Remove anything private.
+      render: text

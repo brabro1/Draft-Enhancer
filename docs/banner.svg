@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 240" role="img" aria-label="Draft Enhancer">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a55c7"/>
+      <stop offset="1" stop-color="#8a4fd6"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="240" rx="20" fill="url(#g)"/>
+  <g transform="translate(70 62)" fill="#fff" opacity="0.95">
+    <path d="M96 4c-36 8-70 44-82 96l-8 30 30-8c10-6 24-16 36-30l-10-4 14-12-8-6 20-10c20-18 30-40 30-56 0 0-12 0-22 0z"/>
+    <path d="M10 140l24-6-18-18z"/>
+  </g>
+  <text x="230" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#fff">Draft Enhancer</text>
+  <text x="232" y="158" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#fff" opacity="0.9">Enhance my draft  ·  Write something for me</text>
+  <text x="232" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#fff" opacity="0.75">a SillyTavern extension</text>
+</svg>

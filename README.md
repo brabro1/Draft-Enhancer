@@ -1,19 +1,46 @@
-# Draft Enhancer for SillyTavern (beta)
+<p align="center"><img src="docs/banner.svg" alt="Draft Enhancer" width="720"></p>
 
-Janitor AI's **Enhance my draft** and **Write something for me**, brought to SillyTavern.
+<p align="center">
+Janitor AI's <b>Enhance my draft</b> and <b>Write something for me</b>, for SillyTavern.<br>
+Type a rough line, get a finished message. It follows your preset, and you stay in control of what gets sent.
+</p>
 
-- **Enhance my draft**: type a rough line, even three words, and it becomes a finished message.
-- **Write something for me**: the next message is written for you. Anything you typed is used as the direction.
+<p align="center">
+<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.1.0--beta.1-orange"></a>
+<img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
+<a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
+</p>
 
-Both follow your active preset, jailbreak included, and put the result in the message box so you can edit it before sending.
+> **Beta.** It works, but expect changes between versions. Bug reports and ideas are very welcome in the [issues](https://github.com/brabro1/Draft-Enhancer/issues).
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-2.1.0--beta.1-orange)
-![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-informational)
+## What it does
 
-> **Beta.** This is a pre-release. It works, but expect changes between versions. Bug reports and feedback are very welcome in the [issues](https://github.com/brabro1/Draft-Enhancer/issues).
+| You type | You get |
+| --- | --- |
+| `I wave and say hi` + **Enhance my draft** | A full message: *I raise a hand in a small wave and offer a warm smile. "Hi. Mind if I sit here?"* |
+| *(nothing)* + **Write something for me** | The next message, written for you in your voice |
+| `ask about the key (curious, not accusing)` + **Write something for me** | A message that asks about the key, using the bracket as a direction |
 
-<!-- Screenshots: add images here, for example ![Menu](docs/menu.png) -->
+The result always lands in your message box. Edit it, regenerate it, or throw it away, then send when you are happy.
+
+## Features
+
+- **Two actions**: enhance a draft, or have the next message written for you.
+- **Follows your preset**: main prompt, jailbreak, lorebooks, persona and chat history all apply, because it runs through SillyTavern's Impersonate.
+- **Write as** yourself, the character, or the narrator.
+- **Sounds like you**: optional voice matching from your recent messages, plus tone, point of view, formatting, language and length controls.
+- **Keep / Regenerate / Discard** bar, with a history of earlier results you can flip back to.
+- **Works with any model**: a compact instruction style for small or local models, retries on empty results, and clean-up of reasoning blocks, headers, status panels and chatty lead-ins.
+- **Everywhere**: feather button, wand menu, keyboard shortcuts and slash commands. Works on phone and desktop.
+- **Private**: no network requests of its own.
+
+## Quick start
+
+1. Install it (below), reload SillyTavern and open a chat.
+2. Type a few words in the message box.
+3. Tap the feather button and pick **Enhance my draft** (or press `Alt+E`).
+4. Press **Keep** to edit and send, **Regenerate** for another take, or **Discard** to get your draft back.
 
 ## Contents
 
@@ -22,8 +49,11 @@ Both follow your active preset, jailbreak included, and put the result in the me
 - [How it follows your preset](#how-it-follows-your-preset)
 - [Settings](#settings)
 - [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
 - [Limitations](#limitations)
 - [Privacy](#privacy)
+- [Updating](#updating)
+- [Contributing](#contributing)
 - [For developers](#for-developers)
 - [License](#license)
 
@@ -200,6 +230,18 @@ Open **Extensions** and expand **Draft Enhancer**.
 
 **Does it work in group chats?** Yes. "The character" is whoever SillyTavern currently treats as the active character.
 
+## FAQ
+
+**Does it work with my model or API?** Yes. It uses whatever connection SillyTavern already has, chat completion or text completion. If a small or local model ignores the instructions, set **Instruction style** to **Compact**.
+
+**Will it post as the character?** No. The text always goes into your message box and nothing is sent until you send it (unless you turn on **Send automatically**).
+
+**Can I change the instruction it sends?** Yes: add **Your notes**, or replace the whole instruction in **Custom instruction (advanced)**. Turn on **Log every request** to see exactly what is sent.
+
+**Does it cost extra?** Each use is one normal generation on your API, like pressing Impersonate.
+
+**Does it work in group chats?** Yes. "The character" is whoever SillyTavern currently treats as the active character.
+
 ## Limitations
 
 - Beta: settings and behaviour may still change.
@@ -212,6 +254,14 @@ Open **Extensions** and expand **Draft Enhancer**.
 ## Privacy
 
 Draft Enhancer makes no network requests of its own. Your text goes only to the API you already use in SillyTavern, the same way a normal message does. It stores only its settings, inside your SillyTavern settings.
+
+## Updating
+
+In SillyTavern open **Extensions**, click the update (circular arrow) icon next to Draft Enhancer, then reload the page. Or run `git pull` inside the extension folder. See the [changelog](CHANGELOG.md) and the [releases](https://github.com/brabro1/Draft-Enhancer/releases).
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. For a bug, open an [issue](https://github.com/brabro1/Draft-Enhancer/issues/new/choose) with your SillyTavern version, API, model and preset, plus the console output with **Log every request** on (remove anything private).
 
 ## For developers
 
