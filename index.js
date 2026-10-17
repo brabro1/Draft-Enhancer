@@ -71,8 +71,27 @@ const FIELDS = [
         key: 'faithfulness', type: 'select', def: 'balanced', label: 'Enhance: faithfulness', grid: true,
         options: [['strict', 'Strict (only wording and detail)'], ['balanced', 'Balanced (small supporting beats)'], ['creative', 'Creative (develop the idea)']],
     },
+    {
+        key: 'tone', type: 'select', def: 'auto', label: 'Tone', grid: true,
+        options: [
+            ['auto', 'Auto (follow the chat)'], ['warm', 'Warm and gentle'], ['romantic', 'Romantic'], ['playful', 'Playful and teasing'],
+            ['tense', 'Tense'], ['dark', 'Dark and serious'], ['calm', 'Calm and reflective'], ['angry', 'Angry'],
+        ],
+    },
+    { key: 'voiceMatch', type: 'bool', def: true, label: 'Match my writing voice (uses a few of my recent messages as a style sample)' },
+    { key: 'parenDirections', type: 'bool', def: true, label: 'Treat (parentheses) and [brackets] in my text as directions, not words to write' },
     { key: 'noRepeat', type: 'bool', def: true, label: 'Ask the model not to repeat recent messages' },
     { key: 'endOpen', type: 'bool', def: true, label: 'Stop where the other side would answer (leave the turn open)' },
+
+    { section: 'Model compatibility' },
+    {
+        key: 'instructionStyle', type: 'select', def: 'full', label: 'Instruction style', grid: true,
+        options: [['full', 'Full (best for large models)'], ['compact', 'Compact (small or local models)']],
+        hint: 'Compact sends a shorter note with only the essential rules, which weaker models follow more reliably.',
+    },
+    { key: 'retries', type: 'number', def: 1, label: 'Retries on an empty result', min: 0, max: 3, step: 1, grid: true },
+    { key: 'emptyToWrite', type: 'bool', def: true, label: 'Enhance with an empty box writes something for me instead' },
+    { key: 'trimUnfinished', type: 'bool', def: true, label: 'Cut a reply that was stopped mid-sentence back to its last full sentence' },
 
     { section: 'Instructions' },
     { key: 'notesEnhance', type: 'area', def: '', label: 'Your notes for Enhance my draft', placeholder: 'e.g. Keep sentences short, no purple prose.' },
@@ -91,6 +110,7 @@ const FIELDS = [
     { key: 'cleanHeaders', type: 'bool', def: true, label: 'Remove scene headers ( [ time | day | place ] )' },
     { key: 'cleanPanels', type: 'bool', def: true, label: 'Remove status, tracker and internal-state panels' },
     { key: 'cleanHtml', type: 'bool', def: true, label: 'Remove any remaining HTML tags' },
+    { key: 'cleanPreamble', type: 'bool', def: true, label: 'Remove chatty lead-ins ("Sure, here is…") and trailing notes' },
     { key: 'cleanCustom', type: 'area', def: '', label: 'Also remove (one regular expression per line)', placeholder: '/^\\[OOC:[^\\]]*\\]\\s*/gm' },
 ];
 
@@ -105,6 +125,8 @@ const state = {
     cancelled: false,
     undo: null,
     lastRun: null, // { kind, text, subject, original } — what Regenerate and Discard act on
+    history: [],   // results of the current Regenerate chain, so you can flip back to an earlier one
+    hIdx: 0,
     lastPrompt: '',
     lastOutput: '',
 };
@@ -240,46 +262,85 @@ const FORMAT = {
     dialogue: 'Write spoken dialogue only, with no narration or action lines.',
 };
 
-/** The rule list, built from the settings. Only rules that say something are included. */
+const TONE = {
+    warm: 'Tone: warm and gentle.',
+    romantic: 'Tone: romantic.',
+    playful: 'Tone: playful and teasing.',
+    tense: 'Tone: tense.',
+    dark: 'Tone: dark and serious.',
+    calm: 'Tone: calm and reflective.',
+    angry: 'Tone: angry.',
+};
+
+const HAS_DIRECTION = /\([^()\n]{2,}\)|\[[^\[\]\n]{2,}\]/;
+
+/**
+ * The rule list, built from the settings. Only rules that say something are included.
+ * `core` holds the indexes of the rules kept by the compact instruction style.
+ */
 function buildRules(kind, text, s) {
     const r = roles(s);
     const [lo, hi] = lengthRange(kind, words(text), s);
     const rules = [];
+    const core = new Set();
+    const add = (rule, isCore = false) => {
+        if (isCore) core.add(rules.length);
+        rules.push(rule);
+    };
 
     if (kind === 'enhance') {
-        rules.push(FAITH[s.faithfulness] || FAITH.balanced);
-        if (r.mode === 'user') rules.push(`If the draft already says what ${r.other} does or says, keep that as written. Otherwise do not write for ${r.other}.`);
-        else rules.push(`Keep anything the draft gives to ${r.other} as written, and add nothing else for ${r.other}.`);
+        add(FAITH[s.faithfulness] || FAITH.balanced, true);
+        if (r.mode === 'user') add(`If the draft already says what ${r.other} does or says, keep that as written. Otherwise do not write for ${r.other}.`, true);
+        else add(`Keep anything the draft gives to ${r.other} as written, and add nothing else for ${r.other}.`, true);
     } else if (r.mode === 'user') {
-        rules.push(`Write only ${r.who}. Leave ${r.other}'s words and actions to ${r.other}.`);
+        add(`Write only ${r.who}. Leave ${r.other}'s words and actions to ${r.other}.`, true);
     } else if (r.mode === 'char') {
-        rules.push(`Write ${r.char} and what happens around them. Do not write ${r.user}'s own actions, words or thoughts.`);
+        add(`Write ${r.char} and what happens around them. Do not write ${r.user}'s own actions, words or thoughts.`, true);
     } else {
-        rules.push(`Write the scene, the events and any side characters. Do not decide what ${r.user} does, says or feels.`);
+        add(`Write the scene, the events and any side characters. Do not decide what ${r.user} does, says or feels.`, true);
     }
 
-    if (s.pov !== 'auto') rules.push(POV[s.pov]);
-    else if (kind === 'enhance') rules.push("Keep the draft's point of view and tense.");
-    else rules.push('Follow the point of view and tense of the recent messages.');
+    if (s.parenDirections && HAS_DIRECTION.test(text)) {
+        add('Text in (parentheses) or [square brackets] is a direction to you, not words to write: follow it and leave the brackets out of the result.', true);
+    }
 
-    if (s.format !== 'auto') rules.push(FORMAT[s.format]);
-    else if (kind === 'enhance') rules.push("Keep the draft's formatting style.");
+    if (s.pov !== 'auto') add(POV[s.pov], true);
+    else if (kind === 'enhance') add("Keep the draft's point of view and tense.");
+    else add('Follow the point of view and tense of the recent messages.');
 
-    if (s.language === 'custom' && String(s.languageName || '').trim()) rules.push(`Write in ${String(s.languageName).trim()}.`);
-    else if (s.language === 'chat') rules.push('Write in the language used in this chat.');
-    else if (kind === 'enhance') rules.push('Write in the same language as the draft.');
+    if (s.format !== 'auto') add(FORMAT[s.format], true);
+    else if (kind === 'enhance') add("Keep the draft's formatting style.");
 
-    rules.push(
+    if (TONE[s.tone]) add(TONE[s.tone], true);
+
+    if (s.language === 'custom' && String(s.languageName || '').trim()) add(`Write in ${String(s.languageName).trim()}.`, true);
+    else if (s.language === 'chat') add('Write in the language used in this chat.', true);
+    else if (kind === 'enhance') add('Write in the same language as the draft.', true);
+
+    add(
         s.length === 'flexible'
             ? kind === 'enhance'
                 ? `Length: as long as the draft's content needs, roughly ${lo}-${hi} words. A short draft becomes a full message; a detailed one is polished without padding.`
                 : `Length: as long as this moment needs, roughly ${lo}-${hi} words.`
             : `Length: about ${lo}-${hi} words.`,
+        true,
     );
 
-    if (s.noRepeat) rules.push('Do not repeat wording or descriptions from the recent messages.');
-    if (s.endOpen) rules.push(`Stop where ${r.mode === 'user' ? r.other : r.user} would answer, leaving the turn open.`);
-    return { rules, lo, hi, r };
+    if (s.noRepeat) add('Do not repeat wording or descriptions from the recent messages.');
+    if (s.endOpen) add(`Stop where ${r.mode === 'user' ? r.other : r.user} would answer, leaving the turn open.`, true);
+    return { rules, core, lo, hi, r };
+}
+
+/** A few of the player's own recent messages, so the result sounds like them. */
+function voiceSample(s, r) {
+    if (!s.voiceMatch || r.mode !== 'user') return '';
+    const msgs = (ctx().chat || []).filter((m) => m && m.is_user && !m.is_system).slice(-3);
+    const parts = msgs
+        .map((m) => clean(m.mes, CLEAN_ALL))
+        .filter((x) => words(x) >= 4)
+        .map((x) => (x.length > 450 ? `${x.slice(0, 450).replace(/\s+\S*$/, '')}…` : x));
+    if (!parts.length) return '';
+    return `How ${r.user} usually writes (match this voice and habits, never copy the content):\n<voice>\n${parts.join('\n---\n')}\n</voice>`;
 }
 
 /** Header lines that tell the model whose turn this is. */
@@ -307,7 +368,7 @@ function applyMacros(template, map) {
  * the task, your text, the rules from your settings and your notes. Everything else is the preset's.
  */
 function buildNote(kind, text, s) {
-    const { rules, lo, hi, r } = buildRules(kind, text, s);
+    const { rules, core, lo, hi, r } = buildRules(kind, text, s);
     const notes = String((kind === 'enhance' ? s.notesEnhance : s.notesWrite) || '').trim();
     const custom = String((kind === 'enhance' ? s.templateEnhance : s.templateWrite) || '').trim();
 
@@ -320,13 +381,34 @@ function buildNote(kind, text, s) {
         return ctx().substituteParams ? ctx().substituteParams(out) : out;
     }
 
-    const lines = [...buildHeader(kind, s, r)];
+    const compact = s.instructionStyle === 'compact';
+    const shown = compact ? rules.filter((_, i) => core.has(i)) : rules;
+    const lines = [];
+
+    if (compact) {
+        const who = r.mode === 'user' ? `${r.user}'s` : r.mode === 'char' ? `${r.char}'s` : "the narrator's";
+        const tag = kind === 'enhance' ? 'draft' : 'direction';
+        lines.push(
+            kind === 'enhance'
+                ? `Rewrite this draft as ${who} finished ${r.piece}, in the style of this story:`
+                : text ? `Write ${who} next ${r.piece}, following this direction:` : `Write ${who} next ${r.piece}, continuing naturally from the last message.`,
+        );
+        if (text) lines.push(`<${tag}>\n${text}\n</${tag}>`);
+        lines.push(shown.join(' '));
+        if (notes) lines.push(`Notes: ${notes}`);
+        lines.push(`Output only the ${r.piece} itself.`);
+        return lines.join('\n');
+    }
+
+    lines.push(...buildHeader(kind, s, r));
     if (kind === 'enhance') {
         lines.push(`The player drafted this:`, `<draft>\n${text}\n</draft>`, `Rewrite it into the finished ${r.piece}, following your instructions and the style of this story.`);
     } else {
         lines.push(text ? `Follow the player's direction closely:\n<direction>\n${text}\n</direction>` : 'Continue naturally from the last message.');
     }
-    lines.push(rules.map((x) => `- ${x}`).join('\n'));
+    lines.push(shown.map((x) => `- ${x}`).join('\n'));
+    const voice = voiceSample(s, r);
+    if (voice) lines.push(voice);
     if (notes) lines.push(`Player's notes: ${notes}`);
     lines.push(`Output only the ${r.piece} itself: no scene header, status block, notes or reasoning.`);
     return lines.join('\n');
@@ -376,11 +458,28 @@ function clean(raw, s) {
         const re = parseRegex(line);
         if (re) t = t.replace(re, '');
     }
-    t = t.replace(/<\/?(draft|direction)>/gi, '');
+    t = t.replace(/<\/?(draft|direction|voice)>/gi, '');
+    if (s.cleanPreamble) {
+        t = t.replace(/^\s*(?:sure|certainly|of course|okay|ok|alright|here(?:'s| is| are))\b[^\n]{0,160}:[ \t]*\n+/i, '');
+        t = t.replace(/\n+[ \t]*[\[(*_]*(?:note|word count|author'?s note|n\.b\.)\b[^\n]*$/i, '');
+    }
     t = t.replace(/^\s*(?:\*\*)?(?:rewritten|enhanced|revised|final)(?: (?:message|draft|reply|version))?(?:\*\*)?\s*:\s*(?:\*\*)?/i, '');
     const { user, char } = names();
     for (const n of [user, char]) t = t.replace(new RegExp(`^\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*`, 'i'), '');
     return t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * A reply that hit the token limit stops mid-sentence. Cut it back to the last full sentence,
+ * but only when that keeps most of the text.
+ */
+function trimUnfinished(t) {
+    const text = String(t || '').trimEnd();
+    if (!text || /[.!?…~)\]}*"'”’»」』]$/.test(text)) return text;
+    const m = [...text.matchAll(/[.!?…]+[*_"'”’»)\]]*(?=\s|$)/g)].pop();
+    if (!m) return text;
+    const cut = m.index + m[0].length;
+    return cut >= text.length * 0.6 ? text.slice(0, cut).trimEnd() : text;
 }
 
 /* ------------------------------------------------------------------ */
@@ -431,7 +530,10 @@ async function run(kind, overrideText, overrideSubject, opts = {}) {
 
     const original = opts.original ?? (box()?.value ?? '');
     const text = String(overrideText ?? original).trim();
-    if (kind === 'enhance' && !text) return toastr.warning('Type a draft in the message box first.', 'Draft Enhancer'), null;
+    if (kind === 'enhance' && !text) {
+        if (!s.emptyToWrite) return toastr.warning('Type a draft in the message box first.', 'Draft Enhancer'), null;
+        kind = 'write'; // nothing to enhance: write the next message instead
+    }
     const subject = overrideSubject || s.subject;
 
     state.busy = true;
@@ -443,22 +545,36 @@ async function run(kind, overrideText, overrideSubject, opts = {}) {
     updateButton();
 
     try {
-        let raw;
-        try {
-            raw = await generate(buildNote(kind, text, { ...s, subject }));
-        } catch (err) {
+        let result = '';
+        const attempts = 1 + clamp(num(s.retries, 1), 0, 3);
+        for (let i = 0; i < attempts && !result; i++) {
+            let raw;
+            try {
+                raw = await generate(buildNote(kind, text, { ...s, subject }));
+            } catch (err) {
+                if (state.cancelled) throw new Cancelled();
+                throw err;
+            }
             if (state.cancelled) throw new Cancelled();
-            throw err;
-        }
-        if (state.cancelled) throw new Cancelled();
 
-        state.lastOutput = String(raw ?? '');
-        if (s.debug) console.log(TAG, `${kind}, as ${subject}\n--- note ---\n${state.lastPrompt}\n--- raw output ---\n${state.lastOutput}`);
-        const result = clean(raw, s);
+            state.lastOutput = String(raw ?? '');
+            if (s.debug) console.log(TAG, `${kind}, as ${subject}, attempt ${i + 1}
+--- note ---
+${state.lastPrompt}
+--- raw output ---
+${state.lastOutput}`);
+            result = clean(raw, s);
+            if (result && s.trimUnfinished) result = trimUnfinished(result);
+            if (!result && i + 1 < attempts) console.warn(TAG, 'empty result, retrying');
+        }
         if (!result) throw new Error('The model returned nothing usable. Check the connection, or raise the response length if your model uses reasoning.');
 
         state.undo = original;
         state.lastRun = { kind, text, subject, original };
+        if (opts.fromBar) state.history.push(result);
+        else state.history = [result];
+        state.history = state.history.slice(-8);
+        state.hIdx = state.history.length - 1;
         setBox(result);
         if (s.autoSend) {
             hideBar();
@@ -492,8 +608,17 @@ async function run(kind, overrideText, overrideSubject, opts = {}) {
 
 const bar = () => document.getElementById('de_bar');
 
+function updateHistoryUI() {
+    const n = state.history.length;
+    $('#de_bar .de-nav').toggleClass('displayNone', n < 2);
+    $('#de_bar .de-count').text(`${state.hIdx + 1}/${n}`);
+    $('#de_bar [data-bar="prev"]').toggleClass('de-disabled', state.hIdx <= 0);
+    $('#de_bar [data-bar="next"]').toggleClass('de-disabled', state.hIdx >= n - 1);
+}
+
 function showBar() {
     if (!settings().actionBar) return;
+    updateHistoryUI();
     syncAnim();
     $('#de_bar').removeClass('displayNone de-working');
     animateIn(bar());
@@ -514,7 +639,15 @@ function barAction(action) {
         box()?.focus();
         return;
     }
+    if (action === 'prev' || action === 'next') {
+        const i = state.hIdx + (action === 'next' ? 1 : -1);
+        if (i < 0 || i >= state.history.length) return;
+        state.hIdx = i;
+        setBox(state.history[i]);
+        return updateHistoryUI();
+    }
     if (action === 'discard') {
+        state.history = [];
         setBox(last ? last.original : '');
         state.undo = null;
         hideBar();
@@ -668,6 +801,7 @@ function buildUI() {
     // Sits right above the message box, where SillyTavern puts its own confirm bar.
     const barHtml = `
         <div id="de_bar" class="de-bar displayNone">
+            <div class="de-nav displayNone"><div class="de-bar-btn de-bar-nav" data-bar="prev" title="Previous result"><i class="fa-solid fa-chevron-left"></i></div><span class="de-count"></span><div class="de-bar-btn de-bar-nav" data-bar="next" title="Next result"><i class="fa-solid fa-chevron-right"></i></div></div>
             <div class="de-bar-btn de-bar-keep" data-bar="keep"><i class="fa-solid fa-check"></i><span>Keep</span></div>
             <div class="de-bar-btn" data-bar="regenerate"><i class="fa-solid fa-rotate"></i><span>Regenerate</span></div>
             <div class="de-bar-btn de-bar-discard" data-bar="discard"><i class="fa-solid fa-xmark"></i><span>Discard</span></div>
@@ -926,7 +1060,8 @@ globalThis.DraftEnhancer = {
     undo,
     getLastPrompt: () => state.lastPrompt,
     getLastOutput: () => state.lastOutput,
-    _internals: { settings, buildNote, buildRules, lengthRange, clean, roles, barAction, state, FIELDS, DEFAULTS },
+    getHistory: () => [...state.history],
+    _internals: { settings, buildNote, buildRules, lengthRange, clean, trimUnfinished, roles, barAction, state, FIELDS, DEFAULTS },
 };
 
 jQuery(async () => {

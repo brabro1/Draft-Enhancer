@@ -8,7 +8,7 @@ Janitor AI's **Enhance my draft** and **Write something for me**, brought to Sil
 Both follow your active preset, jailbreak included, and put the result in the message box so you can edit it before sending.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-2.0.0--beta.3-orange)
+![Version](https://img.shields.io/badge/version-2.1.0--beta.1-orange)
 ![SillyTavern extension](https://img.shields.io/badge/SillyTavern-extension-informational)
 
 > **Beta.** This is a pre-release. It works, but expect changes between versions. Bug reports and feedback are very welcome in the [issues](https://github.com/brabro1/Draft-Enhancer/issues).
@@ -78,7 +78,7 @@ A bar appears right above the message box, in the same place SillyTavern puts it
 | Button | What it does |
 | --- | --- |
 | **Keep** | Hides the bar and leaves the text in the box, ready to edit and send |
-| **Regenerate** | Runs the same request again, with the same draft, direction and subject |
+| **Regenerate** | Runs the same request again, with the same draft, direction and subject. Earlier results are kept: use the **‹ 2/3 ›** arrows to flip between them (last 8) |
 | **Discard** | Puts your original draft back and hides the bar |
 
 The bar also disappears when you send the message or switch chats, and it can be turned off in the settings. Editing the text yourself keeps the bar open, so you can still regenerate or discard afterwards.
@@ -149,8 +149,20 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Formatting | Auto | Auto follows the chat, or force `*actions*` and `"dialogue"`, plain prose, or dialogue only |
 | Language | Same as what I typed | The language of your text, the language of the chat, or one you name |
 | Enhance: faithfulness | Balanced | **Strict**: only wording and detail change. **Balanced**: small supporting beats may be added. **Creative**: the draft is a skeleton to develop. |
+| Tone | Auto | Auto follows the chat, or steer it: warm, romantic, playful, tense, dark, calm, angry |
+| Match my writing voice | On | Sends a few of your recent messages as a style sample so the result sounds like you (only when writing as you) |
+| Treat (parentheses) and [brackets] as directions | On | `I walk in (nervous, hesitant)` makes the model act on the bracket instead of writing it out |
 | Do not repeat recent messages | On | Adds a rule against reusing recent wording |
 | Stop where the other side would answer | On | Keeps the turn open instead of resolving the moment |
+
+**Model compatibility**
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Instruction style | Full | **Compact** sends a much shorter note with only the essential rules. Use it with small or local models that lose track of long instructions |
+| Retries on an empty result | 1 | Automatically asks again (up to 3 times) when the model returns nothing usable |
+| Enhance with an empty box writes for me | On | Instead of a warning, Enhance on an empty box acts like Write something for me |
+| Cut a reply stopped mid-sentence | On | If the response limit cut the text off, it is trimmed back to the last full sentence (only when that keeps most of the text) |
 
 **Instructions**
 
@@ -167,6 +179,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Remove scene headers | On | Lines such as `[ 08:15 PM \| Day 3 \| Tavern ]` |
 | Remove status, tracker and internal-state panels | On | `<details>` blocks, internal-state blocks, HTML comments |
 | Remove any remaining HTML tags | On | Keeps the text inside them, drops the tags |
+| Remove chatty lead-ins and trailing notes | On | Drops "Sure, here is the message:" lines and a trailing "Note: …" line that some models add |
 | Also remove | empty | Your own regular expressions, one per line, as `/pattern/flags` or a bare pattern |
 
 **Reset everything to defaults** is at the bottom of the panel.
@@ -192,7 +205,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 - Beta: settings and behaviour may still change.
 - Needs a recent SillyTavern release.
 - One request at a time, and not while a normal reply is generating.
-- Undo keeps one step.
+- Undo keeps one step. Regenerate history keeps the last 8 results and is cleared by Discard or a new run.
 - Every request is an impersonation as far as SillyTavern is concerned, so other extensions that react to Impersonate also see it.
 - The quality depends on your model and preset.
 

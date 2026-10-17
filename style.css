@@ -319,3 +319,34 @@ body.reduced-motion .de-bar.de-in {
     border: 1px solid currentColor;
     opacity: 0.7;
 }
+
+/* ---------- Result history (‹ 2/3 ›) ---------- */
+.de-nav {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 2px;
+}
+
+.de-nav.displayNone {
+    display: none;
+}
+
+.de-bar-nav {
+    flex: 0 0 auto;
+    min-width: 32px;
+    padding: 5px 6px;
+}
+
+.de-bar-nav.de-disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.de-count {
+    min-width: 30px;
+    text-align: center;
+    font-size: 0.85em;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+}
