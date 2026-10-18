@@ -22,6 +22,11 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 | *(nothing)* + **Write something for me** | The next message, written for you in your voice |
 | `ask about the key (curious, not accusing)` + **Write something for me** | A message that asks about the key, using the bracket as a direction |
 
+<p align="center">
+<img src="docs/menu.jpg" alt="The feather menu: Enhance my draft, Write something for me, Writing as, Undo" width="360">
+<img src="docs/result-bar.jpg" alt="The Keep / Regenerate / Discard bar above the message box, with result history arrows" width="360">
+</p>
+
 The result always lands in your message box. Edit it, regenerate it, or throw it away, then send when you are happy.
 
 ## Features
