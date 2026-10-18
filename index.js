@@ -461,7 +461,7 @@ function clean(raw, s) {
     t = t.replace(/<\/?(draft|direction|voice)>/gi, '');
     if (s.cleanPreamble) {
         t = t.replace(/^\s*(?:sure|certainly|of course|okay|ok|alright|here(?:'s| is| are))\b[^\n]{0,160}:[ \t]*\n+/i, '');
-        t = t.replace(/\n+[ \t]*[\[(*_]*(?:note|word count|author'?s note|n\.b\.)\b[^\n]*$/i, '');
+        t = t.replace(/\n+[ \t]*[\[(*_]*(?:note|word count|author'?s note|n\.b\.)\s*[:：][^\n]*$/i, '');
     }
     t = t.replace(/^\s*(?:\*\*)?(?:rewritten|enhanced|revised|final)(?: (?:message|draft|reply|version))?(?:\*\*)?\s*:\s*(?:\*\*)?/i, '');
     const { user, char } = names();
@@ -471,15 +471,15 @@ function clean(raw, s) {
 
 /**
  * A reply that hit the token limit stops mid-sentence. Cut it back to the last full sentence,
- * but only when that keeps most of the text.
+ * but only when the unfinished tail is a small part of the text (at most 20%).
  */
 function trimUnfinished(t) {
     const text = String(t || '').trimEnd();
-    if (!text || /[.!?…~)\]}*"'”’»」』]$/.test(text)) return text;
+    if (!/[\p{L}\p{N},;:\-–—]$/u.test(text)) return text; // ends in punctuation, a marker or an emoji: looks finished
     const m = [...text.matchAll(/[.!?…]+[*_"'”’»)\]]*(?=\s|$)/g)].pop();
     if (!m) return text;
     const cut = m.index + m[0].length;
-    return cut >= text.length * 0.6 ? text.slice(0, cut).trimEnd() : text;
+    return cut >= text.length * 0.8 ? text.slice(0, cut).trimEnd() : text;
 }
 
 /* ------------------------------------------------------------------ */

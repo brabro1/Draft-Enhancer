@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0-beta.2
+
+- Fix: the "cut a reply stopped mid-sentence" option no longer clips short replies that end in an emoji or a plain word; it only trims a small unfinished tail (at most 20%).
+- Fix: the trailing-note clean-up only removes lines that start with "Note:", not story text that begins with the word "Note".
+
 ## 2.1.0-beta.1
 
 - **Match my writing voice**: a few of your recent messages are sent as a style sample.
