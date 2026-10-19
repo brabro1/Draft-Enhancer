@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0-beta.3
+
+- **Write as: The character** now writes the character's own turn: their point of view, voice, actions and thoughts, and never the player's. Voice matching uses the character's recent messages in this mode.
+- **Write as: Narrator** now narrates like an outside storyteller and decides from the context whether to show both you and the character in the scene or only narrate the setting and events.
+
 ## 2.1.0-beta.2
 
 - Fix: the "cut a reply stopped mid-sentence" option no longer clips short replies that end in an emoji or a plain word; it only trims a small unfinished tail (at most 20%).

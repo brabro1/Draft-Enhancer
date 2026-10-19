@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.1.0--beta.2-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.1.0--beta.3-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>
@@ -132,12 +132,12 @@ Your message does not have to be about you. The **Writing as** row in the menu (
 | Write as | What the result contains |
 | --- | --- |
 | **You** | Your persona's own actions, words and thoughts. The character is left alone. |
-| **The character** | You take over the character for this one turn: their actions, words and thoughts, written by you. It is not a reply posted by the character; it is your message moving them. |
-| **Narrator** | The scene, the events and side characters, without deciding what you do or say. |
+| **The character** | The character's own turn: their point of view, voice, actions, words and thoughts. Nothing the player does, says or thinks is written; the character only reacts to what you already did in the chat. It is not a reply posted by the character; it is your message moving them. |
+| **Narrator** | An outside storyteller. Depending on the moment it shows both you and the character acting and speaking in the scene (plus side characters), or it only narrates the setting, atmosphere and events. It decides from your direction and the recent messages. |
 
-Both actions work with every subject. For example, set **Writing as: (character)**, type `she hands me the tea and smiles`, and **Enhance my draft** turns it into a full paragraph of the character doing that. Or leave the box empty and use **Write something for me**.
+Both actions work with every subject. For example, set **Writing as: (character)**, type `she hands me the tea and smiles`, and **Enhance my draft** turns it into a full paragraph of the character doing that. Or leave the box empty and use **Write something for me**: in character mode the result sounds like the character, because their recent messages are used as the voice sample.
 
-Presets usually tell the model to write only you and never as the character. For the character and narrator subjects, the task note lifts that rule for this one message, and keeps everything else from your preset.
+Presets usually tell the model to write only you and never as the character. For the character and narrator subjects, the task note lifts that rule for this one message, and keeps everything else from your preset. In character mode it also tells the model never to write your actions, words or thoughts.
 
 When writing as you, a draft can still mention what the character does (`I take the cup she offers`). That stays as written and nothing more is added for them.
 

@@ -24,8 +24,8 @@ const SETTINGS_VERSION = 4;
 
 const SUBJECTS = [
     ['user', 'You (your persona)'],
-    ['char', 'The character (you take over their lines)'],
-    ['narrator', 'Narrator (scene and side characters)'],
+    ['char', "The character (their point of view and actions, never yours)"],
+    ['narrator', 'Narrator (the scene, you and the character, or just the story)'],
 ];
 
 const FIELDS = [
@@ -291,13 +291,14 @@ function buildRules(kind, text, s) {
     if (kind === 'enhance') {
         add(FAITH[s.faithfulness] || FAITH.balanced, true);
         if (r.mode === 'user') add(`If the draft already says what ${r.other} does or says, keep that as written. Otherwise do not write for ${r.other}.`, true);
-        else add(`Keep anything the draft gives to ${r.other} as written, and add nothing else for ${r.other}.`, true);
+        else if (r.mode === 'char') add(`Write only ${r.char}: their actions, words, thoughts and feelings. Never write ${r.user}'s actions, words, thoughts or reactions; ${r.char} can only react to what ${r.user} has already done in the chat.`, true);
+        else add(`Keep everything the draft says about ${r.user} and ${r.char} as written, and add nothing the draft does not imply.`, true);
     } else if (r.mode === 'user') {
         add(`Write only ${r.who}. Leave ${r.other}'s words and actions to ${r.other}.`, true);
     } else if (r.mode === 'char') {
-        add(`Write ${r.char} and what happens around them. Do not write ${r.user}'s own actions, words or thoughts.`, true);
+        add(`Write only ${r.char}: their own actions, words, thoughts and feelings, as ${r.char} would have them in this moment. Never write ${r.user}'s actions, words, thoughts or reactions; ${r.char} can only react to what ${r.user} has already done in the chat.`, true);
     } else {
-        add(`Write the scene, the events and any side characters. Do not decide what ${r.user} does, says or feels.`, true);
+        add(`Narrate this moment as an outside storyteller. Decide from the direction and the recent messages what it needs: it may show what both ${r.user} and ${r.char} do and say in the scene (and any side characters), or it may only narrate the setting, the atmosphere and the events, without either of them acting.`, true);
     }
 
     if (s.parenDirections && HAS_DIRECTION.test(text)) {
@@ -306,6 +307,8 @@ function buildRules(kind, text, s) {
 
     if (s.pov !== 'auto') add(POV[s.pov], true);
     else if (kind === 'enhance') add("Keep the draft's point of view and tense.");
+    else if (r.mode === 'char') add(`Write from ${r.char}'s own point of view and in their voice, in the same person and tense as ${r.char}'s earlier messages.`, true);
+    else if (r.mode === 'narrator') add('Narrate in the third person, as an outside storyteller, and keep the tense of the recent messages.', true);
     else add('Follow the point of view and tense of the recent messages.');
 
     if (s.format !== 'auto') add(FORMAT[s.format], true);
@@ -333,14 +336,16 @@ function buildRules(kind, text, s) {
 
 /** A few of the player's own recent messages, so the result sounds like them. */
 function voiceSample(s, r) {
-    if (!s.voiceMatch || r.mode !== 'user') return '';
-    const msgs = (ctx().chat || []).filter((m) => m && m.is_user && !m.is_system).slice(-3);
+    if (!s.voiceMatch || r.mode === 'narrator') return '';
+    const fromUser = r.mode === 'user';
+    const msgs = (ctx().chat || []).filter((m) => m && !!m.is_user === fromUser && !m.is_system).slice(-3);
     const parts = msgs
         .map((m) => clean(m.mes, CLEAN_ALL))
         .filter((x) => words(x) >= 4)
         .map((x) => (x.length > 450 ? `${x.slice(0, 450).replace(/\s+\S*$/, '')}…` : x));
     if (!parts.length) return '';
-    return `How ${r.user} usually writes (match this voice and habits, never copy the content):\n<voice>\n${parts.join('\n---\n')}\n</voice>`;
+    const who = fromUser ? r.user : r.char;
+    return `How ${who} usually ${fromUser ? 'writes' : 'speaks and acts'} (match this voice and habits, never copy the content):\n<voice>\n${parts.join('\n---\n')}\n</voice>`;
 }
 
 /** Header lines that tell the model whose turn this is. */
@@ -350,12 +355,12 @@ function buildHeader(kind, s, r) {
     if (r.mode === 'char') {
         return [
             `[${title}: this turn the player writes ${r.char}.]`,
-            `The player is taking over ${r.char} for this one message. It is sent from ${r.user}'s message box, but it contains ${r.char}'s actions, words and thoughts, written in the style of this story. For this message only, any instruction to write only ${r.user}, or never to write as ${r.char}, does not apply.`,
+            `The player is taking over ${r.char} for this one message. It is sent from ${r.user}'s message box, but it is ${r.char}'s own turn: ${r.char}'s point of view, actions, words and thoughts, written in the style of this story. It must not contain anything ${r.user} does, says or thinks. For this message only, any instruction to write only ${r.user}, or never to write as ${r.char}, does not apply.`,
         ];
     }
     return [
-        `[${title}: this turn the player writes the scene.]`,
-        `The player is narrating for this one message. It is sent from ${r.user}'s message box, but it describes the scene, the events and any side characters. For this message only, any instruction to write only ${r.user} does not apply.`,
+        `[${title}: this turn the player is the narrator.]`,
+        `The player is narrating for this one message. It is sent from ${r.user}'s message box, but it is told by an outside storyteller. Depending on what the moment needs, it can cover both ${r.user} and ${r.char} in the scene, side characters and the surroundings, or only narrate the setting and the events. For this message only, any instruction to write only ${r.user} does not apply.`,
     ];
 }
 
