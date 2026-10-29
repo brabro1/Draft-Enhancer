@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.1.0--beta.3-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.2.0--beta.1-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>
@@ -195,6 +195,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Instruction style | Full | **Compact** sends a much shorter note with only the essential rules. Use it with small or local models that lose track of long instructions |
+| Skip the preset's end-of-reply extras | On | Adds a rule telling the model this is one message for the player: no tracker, status block, suggestions or notes, and no preset rule about who it may write for (roleplay / director / persona modes) |
 | Retries on an empty result | 1 | Automatically asks again (up to 3 times) when the model returns nothing usable |
 | Enhance with an empty box writes for me | On | Instead of a warning, Enhance on an empty box acts like Write something for me |
 | Cut a reply stopped mid-sentence | On | If the response limit cut the text off, it is trimmed back to the last full sentence (only when that keeps most of the text) |
@@ -212,12 +213,20 @@ Open **Extensions** and expand **Draft Enhancer**.
 | --- | --- | --- |
 | Remove reasoning blocks | On | `<think>`, `<thinking>`, `<checklist>` and similar |
 | Remove scene headers | On | Lines such as `[ 08:15 PM \| Day 3 \| Tavern ]` |
-| Remove status, tracker and internal-state panels | On | `<details>` blocks, internal-state blocks, HTML comments |
+| Remove status, tracker and internal-state panels | On | `<details>` blocks, `<tracker>` / `<svt>` / `<trk>` / `<bst>` tag trackers (with their content), plot-director and brainstormer blocks, `💰` one-line trackers, HTML comments |
 | Remove any remaining HTML tags | On | Keeps the text inside them, drops the tags |
 | Remove chatty lead-ins and trailing notes | On | Drops "Sure, here is the message:" lines and a trailing "Note: …" line that some models add |
 | Also remove | empty | Your own regular expressions, one per line, as `/pattern/flags` or a bare pattern |
 
 **Reset everything to defaults** is at the bottom of the panel.
+
+## Works with big toggle presets
+
+Presets such as *Writer's Block Unlimited* switch on many things at once: narrative modes ("Roleplay: never write for the user", "Director: the user is not a character"), trackers that must end **every** reply, writing assistants (plot director, brainstormer), and chain-of-thought templates. Draft Enhancer is built to cope:
+
+- The note tells the model this is one message for the player and to skip trackers, status blocks and suggestions (**Skip the preset's end-of-reply extras**), and that its own task overrides the preset's "who you may write for" rules.
+- Anything that still comes through is removed: `<think>` blocks, `<details>` panels, tag trackers like `<svt>…</svt>`, `<trk>`, `<bst>`, and `<tracker>` wrappers, with their content.
+- If a toggle of yours produces something else, add a pattern under **Also remove**, or turn on **Log every request** and open an [issue](https://github.com/brabro1/Draft-Enhancer/issues/new/choose) with the raw output.
 
 ## Troubleshooting
 

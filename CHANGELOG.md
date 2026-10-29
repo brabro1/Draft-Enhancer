@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0-beta.1
+
+- **Preset compatibility** (tested against Writer's Block Unlimited): new setting that tells the model to skip the preset's end-of-reply extras and its "who you may write for" rules, so narrative modes (Roleplay, Director, Persona) and trackers stop leaking into your message.
+- The clean-up now removes tag trackers (`<svt>`, `<trk>`, `<bst>`, `<tracker>` and their mini-tags) together with their content, plot-director / brainstormer blocks, `💰` one-line trackers and a leftover `(answer)` placeholder.
+
 ## 2.1.0-beta.3
 
 - **Write as: The character** now writes the character's own turn: their point of view, voice, actions and thoughts, and never the player's. Voice matching uses the character's recent messages in this mode.

@@ -89,6 +89,10 @@ const FIELDS = [
         options: [['full', 'Full (best for large models)'], ['compact', 'Compact (small or local models)']],
         hint: 'Compact sends a shorter note with only the essential rules, which weaker models follow more reliably.',
     },
+    {
+        key: 'presetGuard', type: 'bool', def: true,
+        label: "Tell the model to skip the preset's end-of-reply extras (trackers, status blocks, suggestions) and its \"who you may write for\" rules",
+    },
     { key: 'retries', type: 'number', def: 1, label: 'Retries on an empty result', min: 0, max: 3, step: 1, grid: true },
     { key: 'emptyToWrite', type: 'bool', def: true, label: 'Enhance with an empty box writes something for me instead' },
     { key: 'trimUnfinished', type: 'bool', def: true, label: 'Cut a reply that was stopped mid-sentence back to its last full sentence' },
@@ -108,7 +112,7 @@ const FIELDS = [
     { section: 'Clean-up of the result' },
     { key: 'cleanReasoning', type: 'bool', def: true, label: 'Remove reasoning blocks (<think>, <checklist>, …)' },
     { key: 'cleanHeaders', type: 'bool', def: true, label: 'Remove scene headers ( [ time | day | place ] )' },
-    { key: 'cleanPanels', type: 'bool', def: true, label: 'Remove status, tracker and internal-state panels' },
+    { key: 'cleanPanels', type: 'bool', def: true, label: 'Remove status, tracker and internal-state panels (<details>, <tracker>, <svt>, …)' },
     { key: 'cleanHtml', type: 'bool', def: true, label: 'Remove any remaining HTML tags' },
     { key: 'cleanPreamble', type: 'bool', def: true, label: 'Remove chatty lead-ins ("Sure, here is…") and trailing notes' },
     { key: 'cleanCustom', type: 'area', def: '', label: 'Also remove (one regular expression per line)', placeholder: '/^\\[OOC:[^\\]]*\\]\\s*/gm' },
@@ -301,6 +305,13 @@ function buildRules(kind, text, s) {
         add(`Narrate this moment as an outside storyteller. Decide from the direction and the recent messages what it needs: it may show what both ${r.user} and ${r.char} do and say in the scene (and any side characters), or it may only narrate the setting, the atmosphere and the events, without either of them acting.`, true);
     }
 
+    if (s.presetGuard) {
+        add(
+            `This is one message written for the player. Skip any tracker, status or state block, notes, summary, suggestions, options or other extra that the preset asks for at the end of replies, and ignore preset rules about who you may write for or what the player's role is (roleplay, director or persona modes): this task decides that.`,
+            true,
+        );
+    }
+
     if (s.parenDirections && HAS_DIRECTION.test(text)) {
         add('Text in (parentheses) or [square brackets] is a direction to you, not words to write: follow it and leave the brackets out of the result.', true);
     }
@@ -424,7 +435,11 @@ function buildNote(kind, text, s) {
 /* ------------------------------------------------------------------ */
 
 const THINK = 'think|thinking|reasoning|thought|thoughts|checklist|cot|analysis|planning|internal_monologue';
-const PANELS = 'details|summary|internal_states|internal_state|status|stats|tracker|trackers|style|script|table|ooc';
+// Panels and trackers that presets ask for at the end of every reply. The short ones (dy, ob, cs, ...) are
+// the mini-tags of tag-based trackers such as <svt>, <trk> and <bst>; their content goes too, not only the tags.
+const TRACKER_WRAPPERS = 'tracker|trackers|svt|trk|bst|world_activity|money_tracker|inventory|subtext|objective_tracker|plot_director|brainstormer|trope_spotter|chaos_suggester|plot_threads|narrative_mode|director_notes|story_notes';
+const TRACKER_TAGS = 'dy|ob|ph|in|at|wl|hg|th|ai|cs|lc|tm|wx|bg|ch|sx|dt';
+const PANELS = `details|summary|internal_states|internal_state|status|stats|style|script|table|ooc|${TRACKER_WRAPPERS}|${TRACKER_TAGS}`;
 const reThinkPair = new RegExp(`<(${THINK})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
 const reThinkBefore = new RegExp(`^[\\s\\S]*?<\\/(${THINK})>`, 'i'); // reasoning whose opening tag was a prefill
 const reThinkOpen = new RegExp(`<(${THINK})\\b[^>]*>[\\s\\S]*$`, 'i'); // reasoning cut off at the end
@@ -456,6 +471,7 @@ function clean(raw, s) {
             t = t.replace(rePanelPair, ''); // innermost first, so nested panels go too
         }
         t = t.replace(rePanelOpen, '');
+        t = t.replace(/^[ \t]*💰[^\n]*$/gmu, ''); // "💰 Currency: 20" style one-line trackers
     }
     if (s.cleanHtml) t = t.replace(/<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi, '');
     if (s.cleanHeaders) t = t.replace(/^\s*\[[^\]\n]*\|[^\]\n]*\|[^\]\n]*\]\s*$/gm, '');
@@ -465,6 +481,7 @@ function clean(raw, s) {
     }
     t = t.replace(/<\/?(draft|direction|voice)>/gi, '');
     if (s.cleanPreamble) {
+        t = t.replace(/^\s*\(answer\)[ \t]*\n?/i, ''); // placeholder some reasoning templates end with
         t = t.replace(/^\s*(?:sure|certainly|of course|okay|ok|alright|here(?:'s| is| are))\b[^\n]{0,160}:[ \t]*\n+/i, '');
         t = t.replace(/\n+[ \t]*[\[(*_]*(?:note|word count|author'?s note|n\.b\.)\s*[:：][^\n]*$/i, '');
     }
