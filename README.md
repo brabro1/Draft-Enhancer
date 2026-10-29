@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.2.0--beta.1-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.3.0--beta.1-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>
@@ -147,7 +147,7 @@ Draft Enhancer does not use its own writing rules. It runs the request through S
 
 Every request, whatever you write as, goes through **Impersonate**: the same path as SillyTavern's Impersonate button. That means the preset's Impersonation prompt, its impersonation prefill, any prompts set to fire only on Impersonate, and your User Input regex scripts all apply, exactly as they do for a normal impersonation.
 
-On top of that, the extension adds one short note as the last message. The note says only what the preset cannot know:
+On top of that, the extension adds one short note as the very last message of the prompt (with Chat Completion APIs it is appended after everything the preset adds, so a tracker or chain-of-thought template placed at the end cannot outrank it; with other APIs it is injected at depth 0). When you write as the character or the narrator, the preset's own impersonation prompt ("write as you, never as the character") is left out of that one request, because it says the opposite of the task. The note says only what the preset cannot know:
 
 - the task (enhance or write) and whose turn it is
 - your draft or direction

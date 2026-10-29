@@ -459,6 +459,29 @@ function parseRegex(line) {
     }
 }
 
+// Tags that are normal formatting in a message; anything else at the very end is treated as an extra block.
+const KEEP_TAGS = new Set('a b i u s em strong span p br hr sub sup sup small big mark del ins ul ol li blockquote code pre font center q cite'.split(' '));
+
+/**
+ * Presets differ in how they ask for trackers and notes. Whatever the format, the extras come at the very end,
+ * wrapped in their own tag. Removes such blocks (innermost last) when the tag is not ordinary formatting.
+ */
+function stripTrailingBlocks(text) {
+    let t = String(text).trimEnd();
+    for (let i = 0; i < 6; i++) {
+        const m = t.match(/<\/([a-z][\w-]*)\s*>$/i);
+        if (!m || KEEP_TAGS.has(m[1].toLowerCase())) break;
+        const open = new RegExp(`<${m[1]}\\b[^>]*>`, 'ig');
+        let start = -1;
+        for (let o; (o = open.exec(t)); ) start = o.index; // the last opening tag with that name
+        if (start < 0) break;
+        const before = t.slice(0, start).trimEnd();
+        if (!before) break; // the whole message is that block: leave it to the other clean-up steps
+        t = before;
+    }
+    return t;
+}
+
 /** Removes reasoning, preset extras and wrapper noise, according to the clean-up settings. */
 function clean(raw, s) {
     let t = String(raw ?? '');
@@ -473,6 +496,7 @@ function clean(raw, s) {
         t = t.replace(rePanelOpen, '');
         t = t.replace(/^[ \t]*💰[^\n]*$/gmu, ''); // "💰 Currency: 20" style one-line trackers
     }
+    if (s.cleanPanels) t = stripTrailingBlocks(t);
     if (s.cleanHtml) t = t.replace(/<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi, '');
     if (s.cleanHeaders) t = t.replace(/^\s*\[[^\]\n]*\|[^\]\n]*\|[^\]\n]*\]\s*$/gm, '');
     for (const line of String(s.cleanCustom || '').split('\n')) {
@@ -508,19 +532,50 @@ function trimUnfinished(t) {
 /* Generation                                                          */
 /* ------------------------------------------------------------------ */
 
-/** One path for every mode: SillyTavern's Impersonate, with the note as the last message. */
-async function generate(note) {
+/**
+ * Removes the preset's impersonation prompt ("Write as {{user}}, don't write as {{char}}") from a prompt that is
+ * already assembled. Only used when writing as the character or the narrator, where it says the opposite of the task.
+ */
+function stripImpersonationPrompt(messages) {
+    const c = ctx();
+    const raw = String(c.chatCompletionSettings?.impersonation_prompt || '').trim();
+    const needle = raw && c.substituteParams ? String(c.substituteParams(raw)).trim() : raw;
+    if (!needle) return;
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (typeof m?.content !== 'string' || !m.content.includes(needle)) continue;
+        m.content = m.content.split(needle).join('').trim();
+        if (!m.content) messages.splice(i, 1);
+    }
+}
+
+/**
+ * One path for every mode: SillyTavern's Impersonate, with the note as the last message.
+ * Chat Completion: the note is appended to the finished prompt, after every preset prompt, tracker and chain-of-thought
+ * template, so nothing the preset adds at the end can outrank it. Other APIs: it is injected at depth 0.
+ */
+async function generate(note, stripImpersonation = false) {
     const c = ctx();
     state.lastPrompt = note;
-    const inject = typeof c.setExtensionPrompt === 'function';
+    const event = c.eventTypes?.CHAT_COMPLETION_PROMPT_READY;
+    const lastMessage = c.mainApi === 'openai' && !!event && typeof c.eventSource?.on === 'function';
+    const inject = !lastMessage && typeof c.setExtensionPrompt === 'function';
+
+    const onReady = (data) => {
+        if (!data || data.dryRun || !Array.isArray(data.chat)) return;
+        if (stripImpersonation) stripImpersonationPrompt(data.chat);
+        data.chat.push({ role: 'user', content: note });
+    };
 
     setBox('', false); // like /impersonate: start from an empty box (the draft is already saved)
+    if (lastMessage) c.eventSource.on(event, onReady);
     if (inject) c.setExtensionPrompt(NOTE_KEY, note, 1 /* in chat */, 0 /* depth */, false, 1 /* user role */);
     try {
-        const ret = await c.generate('impersonate', inject ? {} : { quiet_prompt: note, quietToLoud: true });
+        const ret = await c.generate('impersonate', lastMessage || inject ? {} : { quiet_prompt: note, quietToLoud: true });
         const text = box()?.value ?? '';
         return text.trim() ? text : String(ret ?? '');
     } finally {
+        if (lastMessage) (c.eventSource.removeListener ?? c.eventSource.off)?.call(c.eventSource, event, onReady);
         if (inject) c.setExtensionPrompt(NOTE_KEY, '', 1, 0, false, 1);
     }
 }
@@ -572,7 +627,7 @@ async function run(kind, overrideText, overrideSubject, opts = {}) {
         for (let i = 0; i < attempts && !result; i++) {
             let raw;
             try {
-                raw = await generate(buildNote(kind, text, { ...s, subject }));
+                raw = await generate(buildNote(kind, text, { ...s, subject }), subject !== 'user');
             } catch (err) {
                 if (state.cancelled) throw new Cancelled();
                 throw err;

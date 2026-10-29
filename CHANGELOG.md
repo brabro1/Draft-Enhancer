@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0-beta.1
+
+- **Works with any preset**: with Chat Completion the note is now appended as the very last message, after all preset prompts, trackers and chain-of-thought templates, so nothing the preset adds at the end can outrank it. Verified end to end in SillyTavern 1.19.0 against Writer's Block Unlimited with trackers, a narrative mode, a writing assistant and a chain-of-thought template switched on, and against the Default preset.
+- Writing as the character or narrator no longer fights the preset's impersonation prompt: it is left out of that one request (writing as you keeps it).
+- Clean-up removes any unknown tag-wrapped block at the very end of a reply (trackers and notes in formats the extension has never seen), unless it is ordinary formatting like `<b>` or `<i>`.
+
 ## 2.2.0-beta.1
 
 - **Preset compatibility** (tested against Writer's Block Unlimited): new setting that tells the model to skip the preset's end-of-reply extras and its "who you may write for" rules, so narrative modes (Roleplay, Director, Persona) and trackers stop leaking into your message.
