@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.5.0-beta.1
+
+- **Continue my draft** (`Alt+C`, `/continue-draft`): keeps what you wrote and adds the rest, from exactly where you stopped.
+- **Enhance a selection**: select part of the box first and only that part is rewritten; the text around it stays exactly as it is.
+- **Refine** on the result bar: Shorter, Longer, More dialogue, More detail, More emotion, Simpler wording, or type your own change.
+- **Clean while streaming**: reasoning, trackers and status blocks no longer flash in the box while the reply streams in; the box says "Draft Enhancer is writing…" while a reasoning model thinks.
+- **Connection profile for drafting**: draft with another API or model from the Connection Manager; the connection is switched back afterwards. It only switches when your own connection is an up-to-date saved profile, so switching back can never lose your settings; otherwise it warns and uses the current connection.
+- **Write as, per character and group**, and in group chats you can pick which member to write as (`as=` also takes a member's name).
+- **Multi-step Undo** (last 20 changes); Undo also brings back a result after Discard.
+- **Preview the note** button in the settings.
+- Tests in the repository (`node tests/run.mjs`, 45 checks), run on every push by GitHub Actions.
+- Tested with a real model (GLM 5.3 thinking, streaming) in SillyTavern 1.19.0.
+
 ## 2.4.1-beta.1
 
 - Code clean-up: index.js rewritten for clarity, about 180 lines shorter, with every feature and setting kept (your settings carry over). Removed the pre-2.0 settings migration (old keys are now simply dropped), fallbacks for SillyTavern versions that are no longer supported, duplicate state and dead CSS. Slash commands now register through SillyTavern's context instead of file imports.

@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.4.1--beta.1-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.5.0--beta.1-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>
@@ -31,12 +31,14 @@ The result always lands in your message box. Edit it, regenerate it, or throw it
 
 ## Features
 
-- **Two actions**: enhance a draft, or have the next message written for you.
+- **Three actions**: enhance a draft (or just the part you selected), have the next message written for you, or let it finish a draft you started.
+- **Refine** any result in one tap: shorter, longer, more dialogue, more detail, more emotion, simpler wording, or a change you type yourself.
 - **Follows your preset**: main prompt, jailbreak, lorebooks, persona and chat history all apply, because it runs through SillyTavern's Impersonate.
-- **Write as** yourself, the character, or the narrator.
+- **Write as** yourself, the character (or any member of a group chat), or the narrator, remembered per character.
 - **Sounds like you**: optional voice matching from your recent messages, plus tone, point of view, formatting, language and length controls.
-- **Keep / Regenerate / Discard** bar, with a history of earlier results you can flip back to.
-- **Works with any model**: a compact instruction style for small or local models, retries on empty results, and clean-up of reasoning blocks, headers, status panels and chatty lead-ins.
+- **Keep / Regenerate / Refine / Discard** bar, with a history of earlier results you can flip back to, and multi-step Undo.
+- **Works with any model and preset**: clean text while it streams (no reasoning or trackers flashing in the box), a compact instruction style for small or local models, retries on empty results, and clean-up of reasoning blocks, headers, trackers and chatty lead-ins.
+- **Draft with another model**: pick a Connection Manager profile for drafting; your connection is switched back afterwards.
 - **Everywhere**: feather button, wand menu, keyboard shortcuts and slash commands. Works on phone and desktop.
 - **Private**: no network requests of its own.
 
@@ -97,16 +99,17 @@ After an update, close and reopen the browser tab so the phone does not keep the
 
 | Menu item | What it does | Shortcut |
 | --- | --- | --- |
-| Enhance my draft | Rewrites the text in the box into a finished message | `Alt+E` |
+| Enhance my draft | Rewrites the text in the box into a finished message. **Select part of the text first** to rewrite only that part; the rest stays exactly as it is. | `Alt+E` |
 | Write something for me | Writes the next message; the text in the box (if any) is the direction | `Alt+W` |
-| Writing as: *name* | Switches between writing as **you** and as **the character** | |
-| Undo last change | Brings back the text you had before | `Alt+Z` |
+| Continue my draft | Keeps what you wrote and adds the rest, from exactly where you stopped (even mid-sentence) | `Alt+C` |
+| Writing as: *name* | Switches between **you**, **the character** (each member in a group chat) and **the narrator**. Remembered per character and group. | |
+| Undo last change | Brings back the text you had before; press again to go further back | `Alt+Z` |
 
 The menu is a small popup above the button that fades in and out exactly like SillyTavern's own options and wand menus, and it follows SillyTavern's reduced-motion setting. Tapping anywhere outside it closes it.
 
-The result appears in the message box and streams in live. Edit it if you like, then send. Tap the feather again while it is working to cancel; your draft comes back.
+The result appears in the message box and streams in live, already cleaned: reasoning, trackers and status blocks never flash in the box (while a reasoning model is still thinking, the box says "Draft Enhancer is writing…"). Edit it if you like, then send. Tap the feather again while it is working to cancel; your draft comes back.
 
-### After each result: Keep, Regenerate, Discard
+### After each result: Keep, Regenerate, Refine, Discard
 
 A bar appears right above the message box, in the same place SillyTavern puts its own confirm bar:
 
@@ -114,20 +117,22 @@ A bar appears right above the message box, in the same place SillyTavern puts it
 | --- | --- |
 | **Keep** | Hides the bar and leaves the text in the box, ready to edit and send |
 | **Regenerate** | Runs the same request again, with the same draft, direction and subject. Earlier results are kept: use the **‹ 2/3 ›** arrows to flip between them (last 8) |
-| **Discard** | Puts your original draft back and hides the bar |
+| **Refine** | Changes the result in the box (including your own edits) in one way: **Shorter**, **Longer**, **More dialogue**, **More detail**, **More emotion**, **Simpler wording**, or type your own change ("make her sound colder") |
+| **Discard** | Puts your original draft back and hides the bar (Undo brings the result back) |
 
 The bar also disappears when you send the message or switch chats, and it can be turned off in the settings. Editing the text yourself keeps the bar open, so you can still regenerate or discard afterwards.
 
-The two actions are also in SillyTavern's **Extensions (wand) menu**, and as slash commands:
+The actions are also in SillyTavern's **Extensions (wand) menu**, and as slash commands:
 
 - `/enhance-draft [text]` (alias `/enhance`)
 - `/write-for-me [direction]` (alias `/writeforme`)
+- `/continue-draft [text]` (alias `/continuedraft`)
 
-Both take an optional `as=` argument for a single run: `/write-for-me as=char she pours the tea`.
+All take an optional `as=` argument for a single run: `user`, `char`, `narrator`, or a group member's name, e.g. `/write-for-me as=char she pours the tea`.
 
 ### Writing as
 
-Your message does not have to be about you. The **Writing as** row in the menu (and the **Write as** setting) cycles between three subjects, and the result always goes into **your own message box** as your message:
+Your message does not have to be about you. The **Writing as** row in the menu (and the **Write as** setting) cycles between you, the character (in a group chat: each member) and the narrator, and remembers the choice per character and group; the result always goes into **your own message box** as your message:
 
 | Write as | What the result contains |
 | --- | --- |
@@ -168,8 +173,8 @@ Open **Extensions** and expand **Draft Enhancer**.
 | --- | --- | --- |
 | Enabled | On | Shows or hides the button and the menu entries |
 | Also show the actions in the wand menu | On | Adds the two actions to SillyTavern's Extensions menu |
-| Keyboard shortcuts | On | `Alt+E`, `Alt+W`, `Alt+Z` inside the message box |
-| Show Keep / Regenerate / Discard | On | The bar above the message box after each result (see above) |
+| Keyboard shortcuts | On | `Alt+E`, `Alt+W`, `Alt+C`, `Alt+Z` inside the message box |
+| Show Keep / Regenerate / Refine / Discard | On | The bar above the message box after each result (see above) |
 | Send automatically | Off | Sends the result right away |
 | Log every request | Off | Writes each note and raw model output to the browser console |
 
@@ -177,7 +182,8 @@ Open **Extensions** and expand **Draft Enhancer**.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Write as | You | You, the character, or the narrator (see above). Also in the menu. |
+| Write as (default) | You | You, the character, or the narrator (see above), for characters you have not set in the menu |
+| Remember "Write as" for each character and group | On | The menu's **Writing as** row is saved per character and per group chat |
 | Length | Flexible | **Flexible** fits your text: a one-line draft grows into a full message (about 50-120 words), a short paragraph roughly doubles, a detailed draft is polished without padding. For Write it follows how long that side of the chat usually writes. **Short** (30-80), **Medium** (80-180), **Long** (180-350) and **Custom range** are fixed. Enhance never makes a draft shorter. |
 | Custom minimum / maximum words | 60 / 160 | Used when Length is **Custom range** |
 | Point of view | Auto | Auto follows the chat, or force first, second or third person |
@@ -185,7 +191,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Language | Same as what I typed | The language of your text, the language of the chat, or one you name |
 | Enhance: faithfulness | Balanced | **Strict**: only wording and detail change. **Balanced**: small supporting beats may be added. **Creative**: the draft is a skeleton to develop. |
 | Tone | Auto | Auto follows the chat, or steer it: warm, romantic, playful, tense, dark, calm, angry |
-| Match my writing voice | On | Sends a few of your recent messages as a style sample so the result sounds like you (only when writing as you) |
+| Match the writing voice | On | Sends a few recent messages from the side being written (yours, or that character's) as a style sample |
 | Treat (parentheses) and [brackets] as directions | On | `I walk in (nervous, hesitant)` makes the model act on the bracket instead of writing it out |
 | Continue exactly where the chat stopped | On | Repeats the last message of the chat right next to the task, so the new message follows directly from it (same scene, place and moment) even when the preset puts pages of instructions between the history and the end of the prompt |
 | Do not repeat recent messages | On | Adds a rule against reusing recent wording |
@@ -195,8 +201,10 @@ Open **Extensions** and expand **Draft Enhancer**.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| Connection profile for drafting | Same as chat | Drafts with another API or model from the Connection Manager, then switches back. For a safe switch back, your own connection must be a saved profile that is still up to date; otherwise Draft Enhancer warns and uses your current connection. |
 | Instruction style | Full | **Compact** sends a much shorter note with only the essential rules. Use it with small or local models that lose track of long instructions |
 | Skip the preset's end-of-reply extras | On | Adds a rule telling the model this is one message for the player: no tracker, status block, suggestions or notes, and no preset rule about who it may write for (roleplay / director / persona modes) |
+| Clean the text live while it streams | On | Shows the reply cleaned while it streams in |
 | Retries on an empty result | 1 | Automatically asks again (up to 3 times) when the model returns nothing usable |
 | Enhance with an empty box writes for me | On | Instead of a warning, Enhance on an empty box acts like Write something for me |
 | Cut a reply stopped mid-sentence | On | If the response limit cut the text off, it is trimmed back to the last full sentence (only when that keeps most of the text) |
@@ -219,7 +227,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Remove chatty lead-ins and trailing notes | On | Drops "Sure, here is the message:" lines and a trailing "Note: …" line that some models add |
 | Also remove | empty | Your own regular expressions, one per line, as `/pattern/flags` or a bare pattern |
 
-**Reset everything to defaults** is at the bottom of the panel.
+**Preview the note** (at the bottom of the panel) shows exactly what would be sent right now for the text in your box. **Reset everything to defaults** is next to it.
 
 ## Works with big toggle presets
 
@@ -262,7 +270,8 @@ Presets such as *Writer's Block Unlimited* switch on many things at once: narrat
 - Beta: settings and behaviour may still change.
 - Needs a recent SillyTavern release.
 - One request at a time, and not while a normal reply is generating.
-- Undo keeps one step. Regenerate history keeps the last 8 results and is cleared by Discard or a new run.
+- Undo keeps the last 20 changes. Regenerate history keeps the last 8 results and is cleared by Discard, a new run or switching chats.
+- Drafting with another connection profile switches SillyTavern's connection for the duration of the request.
 - Every request is an impersonation as far as SillyTavern is concerned, so other extensions that react to Impersonate also see it.
 - The quality depends on your model and preset.
 
@@ -284,6 +293,7 @@ Bug reports, ideas and pull requests are welcome. For a bug, open an [issue](htt
 manifest.json   extension metadata
 index.js        settings, the task note, generation, cleanup, menu, action bar, slash commands
 style.css       button, menu, action bar and settings styles
+tests/run.mjs   tests for the note and the clean-up (node tests/run.mjs; also run on every push)
 ```
 
 Console helpers:
@@ -292,7 +302,10 @@ Console helpers:
 DraftEnhancer.enhance('I wave');            // same as the menu item; resolves to the text or null
 DraftEnhancer.write('ask about the key');
 DraftEnhancer.write('she pours the tea', 'char'); // one run as a different subject
+DraftEnhancer.continue('I open the door and');
+DraftEnhancer.refine('Make it shorter.');  // changes the result in the box
 DraftEnhancer.undo();
+DraftEnhancer.previewNote();             // shows the note that would be sent
 DraftEnhancer.getLastPrompt();            // the last note that was sent
 DraftEnhancer.getLastOutput();            // the last raw model output
 ```

@@ -232,16 +232,34 @@
     }
 }
 
-/* Narrow screens: tighter buttons, so everything fits on one row */
-@media (max-width: 420px) {
+/* Narrow screens: icons only, except Keep, so everything fits on one row */
+@media (max-width: 480px) {
     .de-bar-btn {
-        gap: 5px;
         padding: 5px 4px;
     }
 
-    .de-bar-btn span {
-        font-size: 0.9em;
+    .de-bar-btn:not(.de-bar-keep) span {
+        display: none;
     }
+}
+
+/* ---------- Refine popup: your own change ---------- */
+.de-refine-own {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 6px 2px;
+}
+
+.de-refine-own input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+.de-refine-own button {
+    margin: 0;
+    padding: 6px 10px;
 }
 
 /* ---------- Settings panel ---------- */
@@ -289,9 +307,24 @@
     font-size: 0.85em;
 }
 
-#de_settings #de_reset {
-    width: fit-content;
+#de_settings .de-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
     margin: 12px 0 6px;
+}
+
+#de_settings .de-buttons .menu_button {
+    width: fit-content;
+    margin: 0;
+}
+
+/* "Preview the note" popup */
+.de-preview {
+    white-space: pre-wrap;
+    text-align: start;
+    font-size: 0.9em;
+    line-height: 1.45;
 }
 
 /* "beta" label in the settings header */
