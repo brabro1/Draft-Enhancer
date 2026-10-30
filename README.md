@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.3.0--beta.1-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.4.0--beta.1-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>
@@ -187,6 +187,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Tone | Auto | Auto follows the chat, or steer it: warm, romantic, playful, tense, dark, calm, angry |
 | Match my writing voice | On | Sends a few of your recent messages as a style sample so the result sounds like you (only when writing as you) |
 | Treat (parentheses) and [brackets] as directions | On | `I walk in (nervous, hesitant)` makes the model act on the bracket instead of writing it out |
+| Continue exactly where the chat stopped | On | Repeats the last message of the chat right next to the task, so the new message follows directly from it (same scene, place and moment) even when the preset puts pages of instructions between the history and the end of the prompt |
 | Do not repeat recent messages | On | Adds a rule against reusing recent wording |
 | Stop where the other side would answer | On | Keeps the turn open instead of resolving the moment |
 
@@ -205,7 +206,7 @@ Open **Extensions** and expand **Draft Enhancer**.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Your notes for Enhance / for Write | empty | Free text added to that action's request |
-| Custom instruction (advanced) | empty | Replaces the built-in note entirely. **Insert the built-in instruction** fills the box with the current one so you can edit it. Macros: `{{draft}}`, `{{direction}}`, `{{rules}}`, `{{notes}}`, `{{subject}}`, `{{other}}`, `{{min}}`, `{{max}}`, plus SillyTavern's own macros such as `{{user}}` and `{{char}}`. |
+| Custom instruction (advanced) | empty | Replaces the built-in note entirely. **Insert the built-in instruction** fills the box with the current one so you can edit it. Macros: `{{draft}}`, `{{direction}}`, `{{rules}}`, `{{notes}}`, `{{subject}}`, `{{other}}`, `{{min}}`, `{{max}}`, `{{last}}` (the last chat message), plus SillyTavern's own macros such as `{{user}}` and `{{char}}`. |
 
 **Clean-up of the result**
 

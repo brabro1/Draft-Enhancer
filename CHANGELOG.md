@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.0-beta.1
+
+- **Continues where the chat stopped**: the last chat message is now sent again inside the note, right next to the task, with an instruction to follow directly from it (same scene, place and moment; no restart, recap or time jump). Fixes drafts that drifted away from the current point of the story, especially with presets that put long instructions after the chat history. New setting, on by default; new `{{last}}` macro for custom instructions.
+
 ## 2.3.0-beta.1
 
 - **Works with any preset**: with Chat Completion the note is now appended as the very last message, after all preset prompts, trackers and chain-of-thought templates, so nothing the preset adds at the end can outrank it. Verified end to end in SillyTavern 1.19.0 against Writer's Block Unlimited with trackers, a narrative mode, a writing assistant and a chain-of-thought template switched on, and against the Default preset.

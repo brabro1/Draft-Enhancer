@@ -80,6 +80,7 @@ const FIELDS = [
     },
     { key: 'voiceMatch', type: 'bool', def: true, label: 'Match my writing voice (uses a few of my recent messages as a style sample)' },
     { key: 'parenDirections', type: 'bool', def: true, label: 'Treat (parentheses) and [brackets] in my text as directions, not words to write' },
+    { key: 'anchor', type: 'bool', def: true, label: 'Continue exactly where the chat stopped (sends the last message again, right next to the task)' },
     { key: 'noRepeat', type: 'bool', def: true, label: 'Ask the model not to repeat recent messages' },
     { key: 'endOpen', type: 'bool', def: true, label: 'Stop where the other side would answer (leave the turn open)' },
 
@@ -345,6 +346,35 @@ function buildRules(kind, text, s) {
     return { rules, core, lo, hi, r };
 }
 
+/**
+ * The last message of the chat, as the story stands. Big presets put pages of instructions between the chat history
+ * and the end of the prompt, so the model can lose the thread; this puts the moment right next to the task.
+ */
+function lastBeat(s, r, compact = false) {
+    if (!s.anchor) return null;
+    const msg = [...(ctx().chat || [])].reverse().find((m) => m && !m.is_system && String(m.mes || '').trim());
+    if (!msg) return null;
+    let text = clean(msg.mes, CLEAN_ALL);
+    if (!text) return null;
+    const max = compact ? 450 : 900;
+    if (text.length > max) text = `…${text.slice(-max).replace(/^\S*\s/, '')}`; // the end matters most
+    const speaker = msg.name || (msg.is_user ? r.user : r.char);
+    const yours = r.mode === 'user' ? !!msg.is_user : r.mode === 'char' && !msg.is_user && speaker === r.char;
+    return { text, speaker, yours };
+}
+
+function anchorLines(kind, beat, r) {
+    if (!beat) return [];
+    const lines = [`The story has stopped here. The last message in the chat, from ${beat.speaker}:`, `<last_message>\n${beat.text}\n</last_message>`];
+    lines.push(
+        beat.yours
+            ? `That message is already part of the story and is not repeated. The new message follows directly after it, in the same scene, place and moment: do not restart the scene, recap, or jump ahead in time.`
+            : `The new message follows directly after it, in the same scene, place and moment, as the reply to what it just did or said. Do not restart the scene, recap, contradict it, or jump ahead in time.`,
+    );
+    if (kind === 'enhance') lines.push(`Use it for continuity only: the draft decides what happens.`);
+    return lines;
+}
+
 /** A few of the player's own recent messages, so the result sounds like them. */
 function voiceSample(s, r) {
     if (!s.voiceMatch || r.mode === 'narrator') return '';
@@ -392,6 +422,7 @@ function buildNote(kind, text, s) {
         const map = {
             draft: text, direction: text, rules: rules.map((x) => `- ${x}`).join('\n'), notes,
             subject: r.who, other: r.other, min: String(lo), max: String(hi),
+            last: lastBeat({ ...s, anchor: true }, r)?.text ?? '',
         };
         const out = applyMacros(custom, map);
         return ctx().substituteParams ? ctx().substituteParams(out) : out;
@@ -409,6 +440,8 @@ function buildNote(kind, text, s) {
                 ? `Rewrite this draft as ${who} finished ${r.piece}, in the style of this story:`
                 : text ? `Write ${who} next ${r.piece}, following this direction:` : `Write ${who} next ${r.piece}, continuing naturally from the last message.`,
         );
+        const beat = lastBeat(s, r, true);
+        if (beat) lines.push(`Story so far ends with this message from ${beat.speaker}; continue directly from it, same scene and moment:\n<last_message>\n${beat.text}\n</last_message>`);
         if (text) lines.push(`<${tag}>\n${text}\n</${tag}>`);
         lines.push(shown.join(' '));
         if (notes) lines.push(`Notes: ${notes}`);
@@ -417,6 +450,7 @@ function buildNote(kind, text, s) {
     }
 
     lines.push(...buildHeader(kind, s, r));
+    lines.push(...anchorLines(kind, lastBeat(s, r), r));
     if (kind === 'enhance') {
         lines.push(`The player drafted this:`, `<draft>\n${text}\n</draft>`, `Rewrite it into the finished ${r.piece}, following your instructions and the style of this story.`);
     } else {
@@ -503,7 +537,7 @@ function clean(raw, s) {
         const re = parseRegex(line);
         if (re) t = t.replace(re, '');
     }
-    t = t.replace(/<\/?(draft|direction|voice)>/gi, '');
+    t = t.replace(/<\/?(draft|direction|voice|last_message)>/gi, '');
     if (s.cleanPreamble) {
         t = t.replace(/^\s*\(answer\)[ \t]*\n?/i, ''); // placeholder some reasoning templates end with
         t = t.replace(/^\s*(?:sure|certainly|of course|okay|ok|alright|here(?:'s| is| are))\b[^\n]{0,160}:[ \t]*\n+/i, '');
