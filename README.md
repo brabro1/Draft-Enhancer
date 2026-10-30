@@ -7,7 +7,7 @@ Type a rough line, get a finished message. It follows your preset, and you stay 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.4.0--beta.1-orange"></a>
+<a href="https://github.com/brabro1/Draft-Enhancer/releases"><img alt="Version" src="https://img.shields.io/badge/version-2.4.1--beta.1-orange"></a>
 <img alt="SillyTavern extension" src="https://img.shields.io/badge/SillyTavern-extension-informational">
 <a href="https://github.com/brabro1/Draft-Enhancer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/brabro1/Draft-Enhancer"></a>
 </p>

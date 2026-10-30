@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.1-beta.1
+
+- Code clean-up: index.js rewritten for clarity, about 180 lines shorter, with every feature and setting kept (your settings carry over). Removed the pre-2.0 settings migration (old keys are now simply dropped), fallbacks for SillyTavern versions that are no longer supported, duplicate state and dead CSS. Slash commands now register through SillyTavern's context instead of file imports.
+- Fix: the menu could open in the top-left corner instead of above the feather button; it now positions itself again once the layout settles and when the window resizes.
+- The settings panel is built section by section (no more empty grid hack).
+
 ## 2.4.0-beta.1
 
 - **Continues where the chat stopped**: the last chat message is now sent again inside the note, right next to the task, with an instruction to follow directly from it (same scene, place and moment; no restart, recap or time jump). Fixes drafts that drifted away from the current point of the story, especially with presets that put long instructions after the chat history. New setting, on by default; new `{{last}}` macro for custom instructions.

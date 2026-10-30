@@ -1,8 +1,8 @@
 /* Draft Enhancer — SillyTavern extension */
 
 /* ---------- Send-bar button ----------
-   Size, color and hover come from SillyTavern's own "#leftSendForm > div" rule,
-   so the feather matches the other send-bar icons. Only touch behaviour is added here. */
+   Size, color and hover come from SillyTavern's own "#leftSendForm > div" rule, so the feather matches the other
+   send-bar icons. Only touch behaviour is added here. */
 #de_button {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
@@ -16,25 +16,15 @@
 }
 
 /* ---------- Appear / disappear animation ----------
-   Matches SillyTavern's own options and wand menus: a 125 ms fade that turns off with reduced motion.
-   The duration comes from --de-anim, which the script keeps in step with that setting. */
+   Matches SillyTavern's own menus: a 125 ms fade. The script sets --de-anim to 0ms when reduced motion is on. */
 @keyframes de-fade-in {
     from {
         opacity: 0;
         transform: translateY(4px);
     }
-
-    to {
-        opacity: 1;
-        transform: none;
-    }
 }
 
 @keyframes de-fade-out {
-    from {
-        opacity: 1;
-    }
-
     to {
         opacity: 0;
     }
@@ -49,23 +39,7 @@
     animation: de-fade-out var(--de-anim, 125ms) ease-in forwards;
 }
 
-/* Honour reduced motion even before the script sets the variable. */
-@media (prefers-reduced-motion: reduce) {
-
-    .de-menu.de-in,
-    .de-menu.de-out,
-    .de-bar.de-in {
-        animation: none;
-    }
-}
-
-body.reduced-motion .de-menu.de-in,
-body.reduced-motion .de-menu.de-out,
-body.reduced-motion .de-bar.de-in {
-    animation: none;
-}
-
-/* ---------- Menu (modal <dialog>, positioned by script above the button) ---------- */
+/* ---------- Menu (modal <dialog>, positioned by the script above the button) ---------- */
 .de-menu {
     position: fixed;
     inset: auto;
@@ -84,6 +58,12 @@ body.reduced-motion .de-bar.de-in {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     color: var(--SmartThemeBodyColor, #ddd);
     font: inherit;
+}
+
+/* The menu takes focus when it opens; no focus ring on its surface. */
+.de-menu:focus,
+.de-menu:focus-visible {
+    outline: none;
 }
 
 /* Invisible backdrop: the page stays visible, a tap outside closes the menu. */
@@ -132,18 +112,13 @@ body.reduced-motion .de-bar.de-in {
     font-family: inherit;
 }
 
-.de-item.de-disabled {
-    opacity: 0.4;
-    pointer-events: none;
-}
-
 .de-sep {
     height: 1px;
     margin: 4px 6px;
     background: rgba(128, 128, 128, 0.3);
 }
 
-/* Touch screens: same popup, a little taller rows for fingers, no shortcut hints. */
+/* Touch screens: taller rows for fingers, no shortcut hints. */
 .de-menu.de-touch .de-item {
     min-height: 40px;
     padding: 8px 12px;
@@ -153,8 +128,13 @@ body.reduced-motion .de-bar.de-in {
     display: none;
 }
 
+.de-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
 /* ---------- Keep / Regenerate / Discard bar ----------
-   Sits directly above the message box, in the same slot as SillyTavern's own confirm bar. */
+   Directly above the message box, in the same slot as SillyTavern's own confirm bar. */
 .de-bar {
     display: flex;
     gap: 5px;
@@ -198,18 +178,39 @@ body.reduced-motion .de-bar.de-in {
     background: rgba(128, 128, 128, 0.18);
 }
 
-.de-bar-keep {
+.de-bar-keep,
+.de-bar-keep:hover {
     background: var(--SmartThemeQuoteColor, #4a55c7);
     color: #fff;
 }
 
 .de-bar-keep:hover {
-    background: var(--SmartThemeQuoteColor, #4a55c7);
     filter: brightness(1.15);
 }
 
 .de-bar-discard {
     color: var(--fullred, #ff5f5f);
+}
+
+/* Result history: ‹ 2/3 › */
+.de-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.de-bar-nav {
+    flex: 0 0 auto;
+    min-width: 32px;
+    padding: 5px 6px;
+}
+
+.de-count {
+    min-width: 30px;
+    text-align: center;
+    font-size: 0.85em;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
 }
 
 /* While Regenerate is running */
@@ -231,37 +232,32 @@ body.reduced-motion .de-bar.de-in {
     }
 }
 
-/* Narrow screens: icons only, so the three buttons always fit */
+/* Narrow screens: tighter buttons, so everything fits on one row */
 @media (max-width: 420px) {
-    .de-bar-btn span {
-        font-size: 0.9em;
-    }
-
     .de-bar-btn {
         gap: 5px;
         padding: 5px 4px;
+    }
+
+    .de-bar-btn span {
+        font-size: 0.9em;
     }
 }
 
 /* ---------- Settings panel ---------- */
 #de_settings .de-section {
-    grid-column: 1 / -1;
-    margin: 14px 0 2px;
+    margin: 14px 0 6px;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.35));
     opacity: 0.9;
 }
 
-/* Two-column grid: fields marked de-col sit side by side, everything else spans the width. */
+/* Fields marked de-col sit side by side; everything else spans the width. */
 #de_settings .de-fields {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 8px 10px;
     align-items: start;
-}
-
-#de_settings .de-fields:empty {
-    display: none;
 }
 
 #de_settings .de-row {
@@ -270,12 +266,9 @@ body.reduced-motion .de-bar.de-in {
     gap: 3px;
 }
 
-#de_settings .de-fields > .de-row:not(.de-col),
-#de_settings .de-fields > .de-check {
-    grid-column: 1 / -1;
-}
-
+#de_settings .de-row:not(.de-col),
 #de_settings .de-check {
+    grid-column: 1 / -1;
     margin: 0;
 }
 
@@ -298,13 +291,7 @@ body.reduced-motion .de-bar.de-in {
 
 #de_settings #de_reset {
     width: fit-content;
-    margin-top: 12px;
-}
-
-/* No focus ring on the menu surface itself (it receives focus when opened). */
-.de-menu:focus,
-.de-menu:focus-visible {
-    outline: none;
+    margin: 12px 0 6px;
 }
 
 /* "beta" label in the settings header */
@@ -318,35 +305,4 @@ body.reduced-motion .de-bar.de-in {
     letter-spacing: 0.05em;
     border: 1px solid currentColor;
     opacity: 0.7;
-}
-
-/* ---------- Result history (‹ 2/3 ›) ---------- */
-.de-nav {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 2px;
-}
-
-.de-nav.displayNone {
-    display: none;
-}
-
-.de-bar-nav {
-    flex: 0 0 auto;
-    min-width: 32px;
-    padding: 5px 6px;
-}
-
-.de-bar-nav.de-disabled {
-    opacity: 0.35;
-    pointer-events: none;
-}
-
-.de-count {
-    min-width: 30px;
-    text-align: center;
-    font-size: 0.85em;
-    opacity: 0.8;
-    font-variant-numeric: tabular-nums;
 }
